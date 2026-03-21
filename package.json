@@ -1,0 +1,13 @@
+{
+  "name": "opensource-chat-app",
+  "version": "1.0.0",
+  "main": "index.ts",
+  "scripts": {
+    "build": "bun install --cwd backend && bun install --cwd frontend && bun run --cwd frontend build",
+    "start": "bun run --cwd backend start"
+  },
+  "keywords": [],
+  "author": "sai han htet",
+  "license": "MIT",
+  "description": ""
+}
