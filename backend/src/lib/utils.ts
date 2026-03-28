@@ -11,6 +11,7 @@ export const generateToken = (userId: string, res: Response) => {
     );
 
     res.cookie("token", token, {
+
         maxAge: 7 * 24 * 60 * 60 * 1000,
         httpOnly: true,
         sameSite: "strict",

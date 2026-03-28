@@ -5,6 +5,7 @@ import { z } from "zod";
 import { signUpSchema } from "../schemas/auth.schema";
 import { generateToken } from "../lib/utils";
 import User from "../models/user.model";
+import {sendWelcomeMail} from "../emails/handlers.ts";
 
 
 export const signUp = async (req: Request, res: Response) => {
@@ -35,12 +36,23 @@ export const signUp = async (req: Request, res: Response) => {
         const saveUser = await newUser.save();
         generateToken(saveUser._id.toString(), res);
 
-        return res.status(201).json({
+        res.status(201).json({
             _id: newUser._id,
             username: newUser.username,
             email: newUser.email,
             profilePic: newUser.profilePic
         });
+
+        try {
+            const payload = {
+                email: newUser.email as string,
+                username: newUser.username as string,
+                url: process.env.CLIENT_URL as string,
+            };
+            await sendWelcomeMail(payload);
+        } catch (error){
+            return res.status(400).json({message: "Failed to send welcome email"});
+        }
 
     } catch (error) {
         console.error("SignUp controller:", error);
