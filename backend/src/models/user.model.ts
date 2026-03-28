@@ -1,27 +1,41 @@
 // src/models/user.model.ts
-import mongoose from "mongoose";
+import mongoose, { Model } from "mongoose";
+import type { HydratedDocument, InferSchemaType } from "mongoose";
 
-const userSchema = new mongoose.Schema({
-    username: {
-        type: String,
-        required: true,
-        unique: true,
+const userSchema = new mongoose.Schema(
+    {
+        username: {
+            type: String,
+            required: true,
+            unique: true,
+            trim: true,
+        },
+        email: {
+            type: String,
+            required: true,
+            unique: true,
+            lowercase: true,
+            trim: true,
+        },
+        password: {
+            type: String,
+            required: true,
+            minlength: 6,
+        },
+        profilePic: {
+            type: String,
+            default: "",
+        },
     },
-    email: {
-        type: String,
-        required: true,
-        unique: true,
-    },
-    password: {
-        type: String,
-        required: true,
-        minLength: 6,
-    },
-    profilePic: {
-        type: String,
-        default: ""
-    }
-}, {timestamps: true});
+    { timestamps: true }
+);
 
-const User = mongoose.model("User", userSchema);
+// Plain shape from the schema
+export type IUser = InferSchemaType<typeof userSchema>;
+
+// Real Mongoose document type
+export type UserDocument = HydratedDocument<IUser>;
+
+const User: Model<IUser> = mongoose.model<IUser>("User", userSchema);
+
 export default User;

@@ -1,19 +1,19 @@
 
 import {client, sender} from "../lib/emailsUtils.ts";
-import welcomeTemplate from "./templates.ts"
-interface sendWelcomeProp {
+import welcomeEmailTemplate from "./templates.ts";
+
+export interface sendWelcomeProps {
     email: string;
     name: string;
     url: string;
 }
 
-export const sendWelcomeMail = async (body: sendWelcomeProp) => {
-    const { email, name, url } = body;
+export const sendWelcomeMail = async ({ email, name, url }: sendWelcomeProps) => {
     const {data, error} = await client.emails.send({
         from: `${sender.name} <${sender.email}>`,
         to: email,
         subject: "Welcome to OpenChat!",
-        html: welcomeTemplate(name, url)
+        html: welcomeEmailTemplate({name, url}),
     })
 
     if (error) {

@@ -1,4 +1,11 @@
-export default function welcomeTemplate(name: string, url: string) {
+import {string} from "zod";
+
+interface WelcomeEmailProps {
+    name: string;
+    url: string;
+}
+
+export default function welcomeEmailTemplate({name, url}: WelcomeEmailProps) {
     return `
   <!DOCTYPE html>
   <html lang="en">
@@ -38,7 +45,7 @@ export default function welcomeTemplate(name: string, url: string) {
           margin-top: 20px;
           padding: 12px 20px;
           background: #4f46e5;
-          color: #fff;
+          color: #fff !important;
           text-decoration: none;
           border-radius: 6px;
           font-weight: bold;
