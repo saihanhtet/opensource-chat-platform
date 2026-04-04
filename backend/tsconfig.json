@@ -11,6 +11,9 @@
 
     "allowImportingTsExtensions": true,
     "verbatimModuleSyntax": true,
-    "moduleDetection": "force"
-  }
+    "moduleDetection": "force",
+
+    "typeRoots": ["./node_modules/@types", "./src/types"]
+  },
+  "include": ["src"]
 }

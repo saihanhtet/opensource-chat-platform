@@ -10,3 +10,8 @@ export const SignInSchema = z.object({
     email: z.email(),
     password: z.string(),
 })
+
+export const ProfileUpdateSchema = z.object({
+    username: z.string().max(12, "Username should not be greater than 12 characters").optional(),
+    email: z.email().optional(),
+})

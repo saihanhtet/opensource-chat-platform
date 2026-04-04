@@ -1,4 +1,4 @@
-
+// src/lib/emailsUtils.ts
 import dotenv from "dotenv";
 import { Resend } from "resend";
 

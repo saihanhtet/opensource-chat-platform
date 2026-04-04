@@ -2,7 +2,7 @@ import type { Request, Response } from "express";
 import bcrypt from "bcryptjs";
 import { z } from "zod";
 
-import { SignInSchema, signUpSchema } from "../schemas/auth.schema";
+import {SignInSchema, signUpSchema} from "../schemas/auth.schema";
 import {
     findUserByEmail,
     normalizeEmail,
@@ -11,11 +11,13 @@ import {
     sendServerError,
     sendValidationError
 } from "../lib/utils";
-import User, { type UserDocument } from "../models/user.model";
+import User, {type UserDocument} from "../models/user.model";
 import { sendWelcomeMail, type sendWelcomeProps } from "../emails/handlers";
 
 type SignUpInput = z.infer<typeof signUpSchema>;
 type SignInInput = z.infer<typeof SignInSchema>;
+
+
 
 const AUTH_ERROR_MESSAGE = "Invalid email or password";
 
@@ -110,3 +112,4 @@ export const signOut = async (_req: Request, res: Response) => {
         return sendServerError(res, "Logout controller", error);
     }
 };
+
