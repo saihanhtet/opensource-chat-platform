@@ -8,10 +8,23 @@
     "test": "bun run --cwd backend test",
     "seed": "bun run --cwd backend seed"
   },
-  "keywords": [],
+  "keywords": [
+    "opensource-chat-app",
+    "chat",
+    "chat-platform",
+    "realtime-chat",
+    "monorepo",
+    "nextjs",
+    "express",
+    "mongodb",
+    "mongoose",
+    "typescript",
+    "bun",
+    "open-source"
+  ],
   "author": "sai han htet",
   "license": "MIT",
-  "description": "",
+  "description": "opensource-chat-app — open-source chat platform (Next.js + Bun/Express API)",
   "devDependencies": {
     "@types/cookie-parser": "^1.4.10"
   }

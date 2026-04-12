@@ -1,15 +1,14 @@
-# backend
+# opensource-chat-app — backend
 
-To install dependencies:
+Express + Mongoose API for **opensource-chat-app**, run with **Bun**.
+
+**Full setup:** [../readme/backend-setup.md](../readme/backend-setup.md) — create **`backend/.env`** here only (not repo root / not `frontend/`).
+
+## Short commands
 
 ```bash
 bun install
+bun run dev      # watch mode
+bun run test
+bun run seed     # demo data (see guide)
 ```
-
-To run:
-
-```bash
-bun run index.ts
-```
-
-This project was created using `bun init` in bun v1.3.4. [Bun](https://bun.com) is a fast all-in-one JavaScript runtime.

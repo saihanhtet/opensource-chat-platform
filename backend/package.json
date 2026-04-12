@@ -1,5 +1,18 @@
 {
   "name": "backend",
+  "description": "REST API for opensource-chat-app (Bun, Express, Mongoose)",
+  "keywords": [
+    "opensource-chat-app",
+    "api",
+    "rest",
+    "express",
+    "mongoose",
+    "mongodb",
+    "typescript",
+    "bun",
+    "authentication",
+    "websocket-ready"
+  ],
   "module": "index.ts",
   "type": "module",
   "private": true,
