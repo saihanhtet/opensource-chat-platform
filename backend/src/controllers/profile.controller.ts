@@ -1,4 +1,5 @@
 import type { Request, Response } from "express";
+import { unlink } from "fs/promises";
 import { z } from "zod";
 import cloud from "../lib/cloud"
 import User from "../models/user.model";
@@ -12,6 +13,7 @@ export const editProfile = async (
     req: Request,
     res: Response
 ) => {
+    const tempUploadPath = req.file?.path;
     try{
         const parsed = ProfileUpdateSchema.safeParse(req.body);
         if (!parsed.success) {
@@ -48,5 +50,9 @@ export const editProfile = async (
     } catch (error) {
         console.error("Error at Updating the profile", error);
         return res.status(500).json({error: "Internal Server Error"});
+    } finally {
+        if (tempUploadPath) {
+            await unlink(tempUploadPath).catch(() => {});
+        }
     }
 }
