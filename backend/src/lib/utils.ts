@@ -1,5 +1,5 @@
 import jwt from "jsonwebtoken";
-import type { Response } from "express";
+import type { Request, Response } from "express";
 import User, {type UserDocument} from "../models/user.model.ts";
 import {z} from "zod";
 
@@ -59,6 +59,8 @@ export const buildUserResponse = (user: UserDocument) => ({
     username: user.username,
     email: user.email,
     profilePic: user.profilePic,
+    role: user.role,
+    status: user.status,
 });
 
 export const sendSafeEmail = async <T>(
@@ -82,3 +84,10 @@ export const findUserByEmail = async (
 
 
 export const normalizeEmail = (email: string): string => email.toLowerCase().trim();
+
+/** Express 5 may type `req.params.id` as `string | string[]`. */
+export const reqParamId = (req: Request): string | undefined => {
+    const id = req.params["id"];
+    if (id === undefined) return undefined;
+    return Array.isArray(id) ? id[0] : id;
+};
