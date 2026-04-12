@@ -6,15 +6,15 @@ The **frontend** is a **Next.js** (App Router) application with **React 19**, **
 
 **API keys, database URL, and JWT secrets** belong in **`backend/.env` only** — see [Backend setup](./backend-setup.md). The frontend package does not read that file.
 
-With the API on **`http://localhost:3000`** and Next on **`http://localhost:5173`** (see `frontend/package.json` scripts), create **`frontend/.env.local`** (copy from **`frontend/.env.example`**) so `apiUrl()` and fetches target the backend:
+With the API on **`http://localhost:3000`** and Next on **`http://localhost:5173`**, the default setup uses **same-origin `/api` in the browser** and **`next.config.ts` rewrites** to the Express server. Copy **`frontend/.env.example`** → **`frontend/.env.local`** if you need to change the proxy target:
 
 ```env
-NEXT_PUBLIC_API_URL=http://localhost:3000
+BACKEND_PROXY_URL=http://127.0.0.1:3000
 ```
 
-You can run `bun run dev` without `.env.local` only if the UI and API share the same origin (e.g. production build served by Express). For normal `next dev`, set `NEXT_PUBLIC_API_URL` as above.
+Only set **`NEXT_PUBLIC_API_URL`** if the browser must call the API on another origin (no `/api` rewrite). Never put secrets in `NEXT_PUBLIC_*` variables — they are exposed in the browser.
 
-Use only variables prefixed with **`NEXT_PUBLIC_`** in the frontend. Never put secrets there — they are exposed in the browser.
+**Auth:** `middleware.ts` calls **`GET /api/auth/check-token`** with your cookies. Logged-in users hitting **`/login`** or **`/signup`** are redirected home; unauthenticated users hitting protected routes are sent to **`/login`** (with optional **`?from=`**).
 
 ## Requirements
 
@@ -60,7 +60,7 @@ The backend defaults to **`http://localhost:3000`** (see [Backend setup](./backe
 - Send **cookies** when using session-style auth (`credentials: 'include'` if the API sets cookies on sign-in).
 - Ensure **CORS** and **SameSite** cookie settings match your deployment (localhost vs production domains).
 
-See **`frontend/.env.example`** for the recommended `NEXT_PUBLIC_API_URL` line.
+See **`frontend/.env.example`** for `BACKEND_PROXY_URL` and optional `NEXT_PUBLIC_API_URL`.
 
 ## Monorepo workflow
 

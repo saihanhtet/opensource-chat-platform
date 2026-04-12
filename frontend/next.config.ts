@@ -1,9 +1,22 @@
 import type { NextConfig } from "next";
 
+/** Express API when Next runs on another port (`next dev`). Not used when UI is served from the same server as the API. */
+const backendProxyTarget =
+  process.env.BACKEND_PROXY_URL ||
+  process.env.BACKEND_URL ||
+  "http://127.0.0.1:3000";
+
 const nextConfig: NextConfig = {
-  output: "export",
   images: {
     unoptimized: true,
+  },
+  async rewrites() {
+    return [
+      {
+        source: "/api/:path*",
+        destination: `${backendProxyTarget.replace(/\/$/, "")}/api/:path*`,
+      },
+    ];
   },
 };
 

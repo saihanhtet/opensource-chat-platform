@@ -7,6 +7,7 @@ import { RiEyeCloseFill, RiEyeFill } from "@remixicon/react"
 
 import { APP_NAME } from "@/lib/app-metadata"
 import { AuthApiError, signIn } from "@/lib/auth-api"
+import { safeAppPath } from "@/lib/navigation-utils"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
 import {
@@ -28,8 +29,9 @@ import { cn } from "@/lib/utils"
 
 export function LoginForm({
   className,
+  redirectTo,
   ...props
-}: React.ComponentProps<"div">) {
+}: React.ComponentProps<"div"> & { redirectTo?: string | null }) {
   const router = useRouter()
   const [showPassword, setShowPassword] = useState(false)
   const [formError, setFormError] = useState<string | null>(null)
@@ -46,7 +48,8 @@ export function LoginForm({
     setIsSubmitting(true)
     try {
       await signIn({ email, password })
-      router.push("/")
+      const next = safeAppPath(redirectTo) ?? "/"
+      router.push(next)
       router.refresh()
     } catch (err) {
       const message =
@@ -78,7 +81,7 @@ export function LoginForm({
                   id="email"
                   name="email"
                   type="email"
-                  placeholder="you@example.com"
+                  placeholder=""
                   autoComplete="email"
                   required
                   disabled={isSubmitting}

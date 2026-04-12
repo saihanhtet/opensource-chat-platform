@@ -144,7 +144,7 @@ bun run seed --append
 backend/
 ├── src/
 │   ├── app.ts              # Express app factory (routes, no listen)
-│   ├── server.ts           # listen + DB connect + production static
+│   ├── server.ts           # listen + DB connect + production Next (App Router)
 │   ├── controllers/
 │   ├── models/
 │   ├── routes/
@@ -161,4 +161,6 @@ Sign-in sets an **httpOnly** cookie (`token`). The browser must call the API wit
 
 ## Production notes
 
-With `NODE_ENV=production`, the server can serve the **Next.js static export** from `frontend/out` if you build the frontend into that path. For a split deployment (API on one host, Next on another), run the API alone and configure the frontend’s API base URL and CORS accordingly.
+With `NODE_ENV=production`, **`bun run --cwd backend start`** runs Express **and** the **Next.js** app from `frontend/.next` (run `bun run --cwd frontend build` first). The UI and `/api` share one origin (same port), so the auth cookie stays on that host. Set **`CLIENT_URL`** in `backend/.env` to that public URL (e.g. `http://localhost:3000` locally).
+
+For a split deployment (API on one host, Next on another), run them separately and configure **`NEXT_PUBLIC_API_URL`**, CORS, and cookies for your domains.
