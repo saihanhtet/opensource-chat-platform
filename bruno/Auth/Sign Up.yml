@@ -1,0 +1,23 @@
+info:
+  name: Sign Up
+  type: http
+  seq: 1
+
+http:
+  method: POST
+  url: "{{BaseURL}}/auth/sign-up"
+  body:
+    type: json
+    data: |-
+      {
+        "username": "{{signupUsername}}",
+        "email": "{{signupEmail}}",
+        "password": "{{signupPassword}}"
+      }
+  auth: inherit
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5

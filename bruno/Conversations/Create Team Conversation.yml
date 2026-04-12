@@ -1,0 +1,24 @@
+info:
+  name: Create Team Conversation
+  type: http
+  seq: 6
+
+http:
+  method: POST
+  url: "{{BaseURL}}/conversations"
+  body:
+    type: json
+    data: |-
+      {
+        "type": "team",
+        "teamId": "{{teamId}}",
+        "participantIds": ["{{myUserId}}", "{{otherUserId}}"],
+        "lastMessage": ""
+      }
+  auth: inherit
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5

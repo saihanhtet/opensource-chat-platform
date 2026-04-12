@@ -1,0 +1,21 @@
+info:
+  name: Create Friend Request
+  type: http
+  seq: 1
+
+http:
+  method: POST
+  url: "{{BaseURL}}/friend-requests"
+  body:
+    type: json
+    data: |-
+      {
+        "receiverId": "{{otherUserId}}"
+      }
+  auth: inherit
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5

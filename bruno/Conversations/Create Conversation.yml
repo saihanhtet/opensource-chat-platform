@@ -1,0 +1,23 @@
+info:
+  name: Create Conversation
+  type: http
+  seq: 1
+
+http:
+  method: POST
+  url: "{{BaseURL}}/conversations"
+  body:
+    type: json
+    data: |-
+      {
+        "type": "direct",
+        "participantIds": ["{{myUserId}}", "{{otherUserId}}"],
+        "lastMessage": ""
+      }
+  auth: inherit
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5

@@ -1,0 +1,21 @@
+info:
+  name: Update Status (receiver only)
+  type: http
+  seq: 4
+
+http:
+  method: PUT
+  url: "{{BaseURL}}/friend-requests/{{friendRequestId}}"
+  body:
+    type: json
+    data: |-
+      {
+        "status": "accepted"
+      }
+  auth: inherit
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5

@@ -1,0 +1,24 @@
+info:
+  name: Create File Record
+  type: http
+  seq: 1
+
+http:
+  method: POST
+  url: "{{BaseURL}}/files"
+  body:
+    type: json
+    data: |-
+      {
+        "conversationId": "{{conversationId}}",
+        "fileName": "bruno-test.txt",
+        "fileType": "text/plain",
+        "fileUrl": "https://example.com/bruno-test.txt"
+      }
+  auth: inherit
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5

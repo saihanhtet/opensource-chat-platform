@@ -9,6 +9,18 @@ Detailed setup lives in the **[readme](./readme/)** folder:
 - **[readme/README.md](./readme/README.md)** — overview and quick start  
 - **[readme/backend-setup.md](./readme/backend-setup.md)** — API server, env, tests, seed  
 - **[readme/frontend-setup.md](./readme/frontend-setup.md)** — Next.js app  
+- **[bruno/README.md](./bruno/README.md)** — Bruno HTTP collection for the REST API  
+
+## Test the API with Bruno
+
+This repo includes a **[Bruno](https://www.usebruno.com/)** collection in the **[`bruno/`](./bruno/)** folder (plain-text requests you can version in Git).
+
+1. **Download and install Bruno** from **[https://www.usebruno.com/](https://www.usebruno.com/)** (desktop app; local-first, no account required for local use).
+2. **Clone or download** this project so you have the `bruno` folder on disk.
+3. In Bruno, **Open Collection** and choose the **`bruno`** directory (the one that contains `opencollection.yml`).
+4. Start the backend (`bun run --cwd backend dev`), optionally run `bun run seed` for demo logins, then run **Sign In** and the other requests.
+
+Full details: **[bruno/README.md](./bruno/README.md)**.
 
 ## Environment variables (`.env`)
 

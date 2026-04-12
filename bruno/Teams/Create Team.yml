@@ -1,0 +1,22 @@
+info:
+  name: Create Team
+  type: http
+  seq: 1
+
+http:
+  method: POST
+  url: "{{BaseURL}}/teams"
+  body:
+    type: json
+    data: |-
+      {
+        "teamName": "Bruno Test Team",
+        "description": "Created from Bruno API client"
+      }
+  auth: inherit
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5

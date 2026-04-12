@@ -1,0 +1,23 @@
+info:
+  name: Create Message
+  type: http
+  seq: 1
+
+http:
+  method: POST
+  url: "{{BaseURL}}/messages"
+  body:
+    type: json
+    data: |-
+      {
+        "conversationId": "{{conversationId}}",
+        "content": "Hello from Bruno API client",
+        "fileUrl": ""
+      }
+  auth: inherit
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5

@@ -1,0 +1,21 @@
+info:
+  name: Update Message
+  type: http
+  seq: 5
+
+http:
+  method: PUT
+  url: "{{BaseURL}}/messages/{{messageId}}"
+  body:
+    type: json
+    data: |-
+      {
+        "content": "Edited via Bruno"
+      }
+  auth: inherit
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5

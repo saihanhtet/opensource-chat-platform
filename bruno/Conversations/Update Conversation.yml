@@ -1,0 +1,21 @@
+info:
+  name: Update Conversation
+  type: http
+  seq: 4
+
+http:
+  method: PUT
+  url: "{{BaseURL}}/conversations/{{conversationId}}"
+  body:
+    type: json
+    data: |-
+      {
+        "lastMessage": "Updated from Bruno"
+      }
+  auth: inherit
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5

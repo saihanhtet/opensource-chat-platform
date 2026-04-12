@@ -1,0 +1,56 @@
+opencollection: 1.0.0
+
+info:
+  name: opensource-chat-app
+config:
+  proxy:
+    inherit: true
+    config:
+      protocol: http
+      hostname: ""
+      port: ""
+      auth:
+        username: ""
+        password: ""
+      bypassProxy: ""
+
+request:
+  variables:
+    - name: BaseURL
+      value: http://localhost:3001/api
+    - name: demoEmail
+      value: alice@demo.local
+    - name: demoPassword
+      value: demo1234
+    - name: demoEmail2
+      value: bob@demo.local
+    - name: demoEmailReceiver
+      value: carol@demo.local
+    - name: signupUsername
+      value: demouser01
+    - name: signupEmail
+      value: demouser01@test.local
+    - name: signupPassword
+      value: demo1234
+    - name: teamId
+      value: ""
+    - name: teamMemberId
+      value: ""
+    - name: conversationId
+      value: ""
+    - name: messageId
+      value: ""
+    - name: friendRequestId
+      value: ""
+    - name: fileId
+      value: ""
+    - name: otherUserId
+      value: ""
+    - name: myUserId
+      value: ""
+bundled: false
+extensions:
+  bruno:
+    ignore:
+      - node_modules
+      - .git

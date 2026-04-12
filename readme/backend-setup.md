@@ -65,6 +65,10 @@ CLOUD_SECRET=
 - **`JWT_SECRET`** — required for signed cookies used by protected routes.
 - **Resend / Cloudinary** — optional; features degrade gracefully or skip when unset.
 
+## API smoke tests (Bruno)
+
+Download **[Bruno](https://www.usebruno.com/)** from **[https://www.usebruno.com/](https://www.usebruno.com/)**, then **Open Collection** and select the repo’s **`bruno`** folder (contains `opencollection.yml`) to call all REST routes against a running server. See **[`bruno/README.md`](../bruno/README.md)** for `BaseURL`, cookies, and ID variables.
+
 ## Run the API
 
 Development (watch mode):

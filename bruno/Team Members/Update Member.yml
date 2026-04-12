@@ -1,0 +1,21 @@
+info:
+  name: Update Member
+  type: http
+  seq: 5
+
+http:
+  method: PUT
+  url: "{{BaseURL}}/team-members/{{teamMemberId}}"
+  body:
+    type: json
+    data: |-
+      {
+        "status": "active"
+      }
+  auth: inherit
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5
