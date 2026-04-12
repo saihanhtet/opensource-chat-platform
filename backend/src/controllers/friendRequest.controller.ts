@@ -1,7 +1,12 @@
 import type { Request, Response } from "express";
 import mongoose from "mongoose";
 
-import { reqParamId, sendServerError, sendValidationError } from "../lib/utils.ts";
+import {
+    isDuplicateKeyError,
+    reqParamId,
+    sendServerError,
+    sendValidationError,
+} from "../lib/utils.ts";
 import FriendRequest from "../models/friendRequest.model.ts";
 import {
     createFriendRequestSchema,
@@ -32,6 +37,11 @@ export const createFriendRequest = async (req: Request, res: Response) => {
         });
         return res.status(201).json(doc);
     } catch (error) {
+        if (isDuplicateKeyError(error)) {
+            return res.status(409).json({
+                message: "A pending friend request already exists between these users",
+            });
+        }
         return sendServerError(res, "createFriendRequest", error);
     }
 };

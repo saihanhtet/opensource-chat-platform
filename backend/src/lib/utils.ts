@@ -1,4 +1,5 @@
 import jwt from "jsonwebtoken";
+import { MongoServerError } from "mongodb";
 import type { Request, Response } from "express";
 import User, {type UserDocument} from "../models/user.model.ts";
 import {z} from "zod";
@@ -91,3 +92,6 @@ export const reqParamId = (req: Request): string | undefined => {
     if (id === undefined) return undefined;
     return Array.isArray(id) ? id[0] : id;
 };
+
+export const isDuplicateKeyError = (error: unknown): error is MongoServerError =>
+    error instanceof MongoServerError && error.code === 11000;

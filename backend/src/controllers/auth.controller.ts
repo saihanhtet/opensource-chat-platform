@@ -63,8 +63,9 @@ export const signUp = async (req: Request, res: Response) => {
         });
         const savedUser = await user.save();
         const response = sendAuthResponse(res, savedUser, 201);
-        // send mail to user
-        await sendWelcomeEmail(savedUser);
+        if (process.env.NODE_ENV !== "test") {
+            await sendWelcomeEmail(savedUser);
+        }
         return response;
     } catch (error) {
         return sendServerError(res, "SignUp controller", error);

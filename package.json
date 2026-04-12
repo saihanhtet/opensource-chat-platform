@@ -4,7 +4,9 @@
   "main": "index.ts",
   "scripts": {
     "build": "bun install --cwd backend && bun install --cwd frontend && bun run --cwd frontend build",
-    "start": "bun run --cwd backend start"
+    "start": "bun run --cwd backend start",
+    "test": "bun run --cwd backend test",
+    "seed": "bun run --cwd backend seed"
   },
   "keywords": [],
   "author": "sai han htet",

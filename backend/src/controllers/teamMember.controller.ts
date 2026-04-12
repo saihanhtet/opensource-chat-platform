@@ -1,7 +1,12 @@
 import type { Request, Response } from "express";
 import mongoose from "mongoose";
 
-import { reqParamId, sendServerError, sendValidationError } from "../lib/utils.ts";
+import {
+    isDuplicateKeyError,
+    reqParamId,
+    sendServerError,
+    sendValidationError,
+} from "../lib/utils.ts";
 import Team from "../models/team.model.ts";
 import TeamMember from "../models/teamMember.model.ts";
 import {
@@ -60,6 +65,11 @@ export const createTeamMember = async (req: Request, res: Response) => {
         });
         return res.status(201).json(member);
     } catch (error) {
+        if (isDuplicateKeyError(error)) {
+            return res.status(409).json({
+                message: "User is already a member of this team",
+            });
+        }
         return sendServerError(res, "createTeamMember", error);
     }
 };
