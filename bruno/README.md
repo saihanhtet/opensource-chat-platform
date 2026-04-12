@@ -13,7 +13,7 @@ If you only have a ZIP, extract it first; Bruno needs a real folder path on disk
 ## Prerequisites
 
 1. **Backend running** with `backend/.env` configured (see [../readme/backend-setup.md](../readme/backend-setup.md)).
-2. Default API base URL: **`http://localhost:3001/api`** — set in collection variables as `BaseURL` if your `PORT` differs.
+2. Default API base URL: **`http://localhost:3000/api`** — set in collection variables as `BaseURL` if your `PORT` differs.
 3. **Demo users** (optional but recommended): from the repo root run `bun run seed`, then use:
    - `alice@demo.local` / `demo1234`
    - `bob@demo.local` / `demo1234`
@@ -23,7 +23,7 @@ Collection variables `demoEmail`, `demoEmail2`, `demoEmailReceiver`, and `demoPa
 
 ## Cookies (auth)
 
-Protected routes use an **httpOnly** cookie named `token` set on **Sign In**. In Bruno, enable **cookie jar** / session handling for the collection so follow-up requests send the cookie to the same host (`localhost:3001`).
+Protected routes use an **httpOnly** cookie named `token` set on **Sign In**. In Bruno, enable **cookie jar** / session handling for the collection so follow-up requests send the cookie to the same host (`localhost:3000`).
 
 Typical flow:
 

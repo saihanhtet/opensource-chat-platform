@@ -17,7 +17,7 @@ config:
 request:
   variables:
     - name: BaseURL
-      value: http://localhost:3001/api
+      value: http://localhost:3000/api
     - name: demoEmail
       value: alice@demo.local
     - name: demoPassword

@@ -10,7 +10,7 @@ dotenv.config();
 const app = createApp();
 const __dirname = path.resolve();
 
-const port = process.env.PORT || 3001;
+const port = process.env.PORT || 3000;
 const env = process.env.NODE_ENV || 'development';
 
 if (env === 'production') {

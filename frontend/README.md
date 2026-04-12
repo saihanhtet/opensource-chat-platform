@@ -8,7 +8,7 @@ Next.js UI for **opensource-chat-app**.
 
 ```bash
 bun install
-bun run dev      # http://localhost:3000
+bun run dev      # http://localhost:5173
 bun run build
 bun run lint
 ```

@@ -23,7 +23,7 @@ const app = createApp();
 
 beforeAll(async () => {
     process.env.JWT_SECRET = "test-jwt-secret-key-for-integration-tests";
-    process.env.CLIENT_URL = "http://localhost:3000";
+    process.env.CLIENT_URL = "http://localhost:5173";
     process.env.NODE_ENV = "test";
 
     mongo = await MongoMemoryServer.create();

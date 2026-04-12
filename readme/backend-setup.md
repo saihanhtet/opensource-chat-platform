@@ -18,7 +18,27 @@ Create the file as:
 opensource-chat-app/backend/.env
 ```
 
-Keep it out of Git (`backend/.gitignore` already lists `.env`). Copy variables from the example block below; replace placeholders with your real values.
+Keep it out of Git (`backend/.gitignore` already lists `.env`). Copy from **`backend/.env.example`** to create `backend/.env`, then edit values.
+
+## Ports: API vs Next.js
+
+This repo standardizes local ports so they do not clash:
+
+| What | Port | Variable / config |
+|------|------|-------------------|
+| **Express API** | **3000** | `PORT` in `backend/.env` (default in code if unset) |
+| **Next.js** (browser UI) | **5173** | `next dev -p 5173` / `next start -p 5173` in **`frontend/package.json`** |
+
+Only one process can bind to a port, so the API and Next must use different values (3000 vs 5173).
+
+**`CLIENT_URL`** is the **frontend** URL (emails, cookie context), not the API:
+
+```env
+CLIENT_URL=http://localhost:5173
+PORT=3000
+```
+
+The browser calls the API at **`http://localhost:3000`** via **`NEXT_PUBLIC_API_URL`** in `frontend/.env.local` — see [Frontend setup](./frontend-setup.md).
 
 ## Requirements
 
@@ -38,7 +58,7 @@ All variables below belong in **`backend/.env`** (see **Where to put `.env`** at
 
 ```env
 # Server
-PORT=3001
+PORT=3000
 NODE_ENV=development
 
 # Database
@@ -47,8 +67,8 @@ MONGODB_URI=mongodb://localhost:27017/chatapp
 # Auth (use a long random string in production)
 JWT_SECRET=your-secret-key
 
-# Used in emails and CORS-related flows; set to your frontend origin
-CLIENT_URL=http://localhost:3000
+# Frontend origin (Next on 5173 in this repo)
+CLIENT_URL=http://localhost:5173
 
 # Email (optional — welcome mail on sign-up)
 RESEND_API=
@@ -83,7 +103,7 @@ Production-style (single run):
 bun run start
 ```
 
-Default listen address: **`http://localhost:3001`** (or `PORT` from `.env`).
+Default listen address: **`http://localhost:3000`** (or `PORT` from `.env`).
 
 API routes are mounted under **`/api`** (for example `/api/auth`, `/api/teams`, `/api/messages`).
 

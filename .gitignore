@@ -3,3 +3,6 @@ dist
 .env
 
 .idea
+
+uploads/*
+.DS_Store

@@ -38,10 +38,10 @@ bun install --cwd frontend
 Create **`backend/.env`** (see [Backend setup](./backend-setup.md)), start MongoDB, then:
 
 ```bash
-# Terminal 1 — API (default http://localhost:3001)
+# Terminal 1 — API (default http://localhost:3000)
 bun run --cwd backend dev
 
-# Terminal 2 — UI (default http://localhost:3000)
+# Terminal 2 — UI (default http://localhost:5173)
 bun run --cwd frontend dev
 ```
 
