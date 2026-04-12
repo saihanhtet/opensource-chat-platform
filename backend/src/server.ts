@@ -23,11 +23,11 @@ app.use('/api/auth', authRoute);
 app.use('/api/messages', messageRoute);
 
 if (env === 'production') {
-    const static_assets = express.static(path.resolve(__dirname, '../frontend/dist'));
+    const static_assets = express.static(path.resolve(__dirname, '../frontend/out'));
     app.use(static_assets);
 
     app.get('/*splat', (_, res) => {
-        res.sendFile(path.join(__dirname, '../frontend', 'dist', 'index.html'));
+        res.sendFile(path.join(__dirname, '../frontend', 'out', 'index.html'));
     });
 }
 
