@@ -16,7 +16,9 @@ function isPublicPage(pathname: string) {
     pathname === "/privacy" ||
     pathname.startsWith("/privacy/") ||
     pathname === "/forgot-password" ||
-    pathname.startsWith("/forgot-password/")
+    pathname.startsWith("/forgot-password/") ||
+    pathname === "/reset-password" ||
+    pathname.startsWith("/reset-password/")
   )
 }
 

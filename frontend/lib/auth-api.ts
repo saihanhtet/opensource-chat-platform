@@ -90,3 +90,34 @@ export function firstFieldMessage(
 ): string | undefined {
   return fieldErrors?.[field]?.[0]
 }
+
+export async function requestPasswordReset(email: string): Promise<{ message: string }> {
+  const res = await fetch(apiUrl("/api/auth/forgot-password"), {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    credentials: "include",
+    body: JSON.stringify({ email }),
+  })
+  const data: unknown = await res.json().catch(() => ({}))
+  if (!res.ok) {
+    throw parseAuthError(res.status, data)
+  }
+  return data as { message: string }
+}
+
+export async function resetPassword(payload: {
+  token: string
+  password: string
+}): Promise<{ message: string }> {
+  const res = await fetch(apiUrl("/api/auth/reset-password"), {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    credentials: "include",
+    body: JSON.stringify(payload),
+  })
+  const data: unknown = await res.json().catch(() => ({}))
+  if (!res.ok) {
+    throw parseAuthError(res.status, data)
+  }
+  return data as { message: string }
+}

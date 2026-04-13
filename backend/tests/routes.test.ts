@@ -11,6 +11,7 @@ import mongoose from "mongoose";
 import request from "supertest";
 
 import { createApp } from "../src/app.ts";
+import User from "../src/models/user.model.ts";
 import {
     clearDatabase,
     signUp,
@@ -112,6 +113,91 @@ describe("Auth routes", () => {
         expect(out.status).toBe(200);
         const check = await agent.get("/api/auth/check-token");
         expect(check.status).toBe(401);
+    });
+
+    test("POST /api/auth/forgot-password responds safely for unknown email", async () => {
+        const res = await request(app).post("/api/auth/forgot-password").send({
+            email: "missing-user@test.local",
+        });
+
+        expect(res.status).toBe(200);
+        expect(res.body.message).toContain("If an account with that email exists");
+    });
+
+    test("POST /api/auth/forgot-password stores reset token for existing user", async () => {
+        const creds = uniqueUser();
+        await request(app).post("/api/auth/sign-up").send(creds);
+
+        const res = await request(app).post("/api/auth/forgot-password").send({
+            email: creds.email,
+        });
+
+        expect(res.status).toBe(200);
+
+        const user = await User.findOne({ email: creds.email });
+        expect(user).toBeDefined();
+        expect(user?.resetPasswordToken).toBeTruthy();
+        expect(user?.resetPasswordTokenExpiresAt).toBeTruthy();
+        expect(new Date(user!.resetPasswordTokenExpiresAt!).getTime()).toBeGreaterThan(
+            Date.now()
+        );
+    });
+
+    test("POST /api/auth/reset-password returns 400 for invalid token", async () => {
+        const res = await request(app).post("/api/auth/reset-password").send({
+            token: "invalid-token",
+            password: "newsecret12",
+        });
+
+        expect(res.status).toBe(400);
+        expect(res.body.message).toBe("Invalid or expired reset link.");
+    });
+
+    test("POST /api/auth/reset-password updates password and clears reset fields", async () => {
+        const creds = uniqueUser();
+        await request(app).post("/api/auth/sign-up").send(creds);
+
+        const user = await User.findOne({ email: creds.email });
+        expect(user).toBeDefined();
+
+        const rawToken = "plain-reset-token";
+        const crypto = await import("crypto");
+        const hashedToken = crypto
+            .createHash("sha256")
+            .update(rawToken)
+            .digest("hex");
+
+        await User.updateOne(
+            { _id: user!._id },
+            {
+                $set: {
+                    resetPasswordToken: hashedToken,
+                    resetPasswordTokenExpiresAt: new Date(Date.now() + 10 * 60 * 1000),
+                },
+            }
+        );
+
+        const reset = await request(app).post("/api/auth/reset-password").send({
+            token: rawToken,
+            password: "newsecret12",
+        });
+        expect(reset.status).toBe(200);
+
+        const oldLogin = await request(app).post("/api/auth/sign-in").send({
+            email: creds.email,
+            password: creds.password,
+        });
+        expect(oldLogin.status).toBe(401);
+
+        const newLogin = await request(app).post("/api/auth/sign-in").send({
+            email: creds.email,
+            password: "newsecret12",
+        });
+        expect(newLogin.status).toBe(200);
+
+        const refreshed = await User.findById(user!._id);
+        expect(refreshed?.resetPasswordToken).toBeNull();
+        expect(refreshed?.resetPasswordTokenExpiresAt).toBeNull();
     });
 
     test("PUT /api/auth/profile returns 401 without auth", async () => {
