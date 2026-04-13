@@ -10,8 +10,12 @@ export default async function LoginPage({
   const redirectTo = safeAppPath(from ?? null)
 
   return (
-    <div className="flex min-h-svh flex-col items-center justify-center bg-muted p-6 md:p-10">
-      <div className="w-full max-w-sm md:max-w-4xl">
+    <div className="relative flex min-h-svh items-center justify-center overflow-hidden bg-gradient-to-b from-background to-muted/40 p-4 sm:p-6">
+      <div className="pointer-events-none absolute inset-0">
+        <div className="absolute left-[-4rem] top-[-4rem] h-48 w-48 rounded-full bg-primary/10 blur-3xl sm:h-72 sm:w-72" />
+        <div className="absolute bottom-[-5rem] right-[-3rem] h-56 w-56 rounded-full bg-pink-400/10 blur-3xl sm:h-80 sm:w-80" />
+      </div>
+      <div className="relative w-full max-w-md">
         <LoginForm redirectTo={redirectTo} />
       </div>
     </div>
