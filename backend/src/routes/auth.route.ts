@@ -6,7 +6,7 @@ import {
     signOut,
     signUp,
 } from '../controllers/auth.controller';
-import {editProfile} from "../controllers/profile.controller.ts";
+import {editProfile, getUserByUsername} from "../controllers/profile.controller.ts";
 import {protectedRoutes, upload} from "../proxy/auth.proxy.ts";
 
 const router = express.Router();
@@ -25,5 +25,6 @@ router.get("/check-token", protectedRoutes, (req, res) => {
 
 // profile
 router.put("/profile", protectedRoutes, upload.single("profilePic"), editProfile);
+router.get("/users/by-username/:username", protectedRoutes, getUserByUsername);
 
 export default router;

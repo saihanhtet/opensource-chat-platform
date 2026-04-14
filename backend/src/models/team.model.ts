@@ -13,6 +13,11 @@ const teamSchema = new mongoose.Schema(
             default: "",
             trim: true,
         },
+        teamType: {
+            type: String,
+            enum: ["personal", "group"],
+            default: "group",
+        },
         createdBy: {
             type: mongoose.Schema.Types.ObjectId,
             ref: "User",

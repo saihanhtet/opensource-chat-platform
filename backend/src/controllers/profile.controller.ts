@@ -56,3 +56,23 @@ export const editProfile = async (
         }
     }
 }
+
+export const getUserByUsername = async (req: Request, res: Response) => {
+    try {
+        if (!req.user) return res.status(401).json({ message: "Unauthorized" });
+
+        const username = req.params["username"]?.trim();
+        if (!username) {
+            return res.status(400).json({ message: "Username is required" });
+        }
+
+        const user = await User.findOne({ username }).select(
+            "_id username email profilePic status role lastSeenAt updatedAt"
+        );
+        if (!user) return res.status(404).json({ message: "User not found" });
+        return res.status(200).json(user);
+    } catch (error) {
+        console.error("Error getting user by username", error);
+        return res.status(500).json({ message: "Internal Server Error" });
+    }
+};

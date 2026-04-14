@@ -62,6 +62,8 @@ export const buildUserResponse = (user: UserDocument) => ({
     profilePic: user.profilePic,
     role: user.role,
     status: user.status,
+    lastSeenAt: user.lastSeenAt,
+    updatedAt: user.updatedAt,
 });
 
 export const sendSafeEmail = async <T>(

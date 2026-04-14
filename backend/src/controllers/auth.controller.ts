@@ -1,6 +1,7 @@
 import type { Request, Response } from "express";
 import bcrypt from "bcryptjs";
 import crypto from "crypto";
+import jwt from "jsonwebtoken";
 import { z } from "zod";
 
 import {
@@ -17,6 +18,8 @@ import {
     sendServerError,
     sendValidationError
 } from "../lib/utils";
+import Team from "../models/team.model.ts";
+import TeamMember from "../models/teamMember.model.ts";
 import User, {type UserDocument} from "../models/user.model";
 import {
     sendPasswordResetMail,
@@ -94,6 +97,18 @@ export const signUp = async (req: Request, res: Response) => {
             password: hashedPassword,
         });
         const savedUser = await user.save();
+        const personalTeam = await Team.create({
+            teamName: `${savedUser.username}'s Personal Team`,
+            description: "Private personal team",
+            teamType: "personal",
+            createdBy: savedUser._id,
+        });
+        await TeamMember.create({
+            teamId: personalTeam._id,
+            userId: savedUser._id,
+            memberRole: "member",
+            status: "active",
+        });
         const response = sendAuthResponse(res, savedUser, 201);
         if (process.env.NODE_ENV !== "test") {
             await sendWelcomeEmail(savedUser);
@@ -136,6 +151,16 @@ export const signIn = async (req: Request, res: Response) => {
 
 export const signOut = async (_req: Request, res: Response) => {
     try {
+        const token = _req.cookies?.token;
+        if (token) {
+            const decoded = jwt.decode(token) as { userId?: string } | null;
+            if (decoded?.userId) {
+                await User.findByIdAndUpdate(decoded.userId, {
+                    status: "offline",
+                    lastSeenAt: new Date(),
+                });
+            }
+        }
         // clear token and log out the user
         res.clearCookie("token");
         return res.status(200).json({

@@ -3,6 +3,7 @@ import mongoose from "mongoose";
 
 import { reqParamId, sendServerError, sendValidationError } from "../lib/utils.ts";
 import Conversation from "../models/conversation.model.ts";
+import User from "../models/user.model.ts";
 import {
     createConversationSchema,
     updateConversationSchema,
@@ -15,6 +16,9 @@ const userInConversation = (
     conv: { participantIds: mongoose.Types.ObjectId[] },
     userId: mongoose.Types.ObjectId
 ) => conv.participantIds.some((p) => p.equals(userId));
+
+const TYPING_TTL_MS = 5000;
+const typingState = new Map<string, Map<string, number>>();
 
 export const createConversation = async (req: Request, res: Response) => {
     try {
@@ -145,5 +149,82 @@ export const deleteConversation = async (req: Request, res: Response) => {
         return res.status(200).json({ message: "Conversation deleted" });
     } catch (error) {
         return sendServerError(res, "deleteConversation", error);
+    }
+};
+
+export const setTypingStatus = async (req: Request, res: Response) => {
+    try {
+        if (!req.user) return res.status(401).json({ message: "Unauthorized" });
+
+        const id = reqParamId(req);
+        if (!id || !mongoose.Types.ObjectId.isValid(id)) return badId(res);
+
+        const conversation = await Conversation.findById(id);
+        if (!conversation) {
+            return res.status(404).json({ message: "Conversation not found" });
+        }
+        const me = req.user._id as mongoose.Types.ObjectId;
+        if (!userInConversation(conversation, me)) {
+            return res.status(403).json({ message: "Forbidden" });
+        }
+
+        const isTyping = Boolean(req.body?.isTyping);
+        const conversationMap = typingState.get(id) ?? new Map<string, number>();
+        const meId = me.toString();
+
+        if (isTyping) {
+            conversationMap.set(meId, Date.now() + TYPING_TTL_MS);
+            typingState.set(id, conversationMap);
+        } else {
+            conversationMap.delete(meId);
+            if (conversationMap.size === 0) typingState.delete(id);
+        }
+
+        return res.status(200).json({ ok: true });
+    } catch (error) {
+        return sendServerError(res, "setTypingStatus", error);
+    }
+};
+
+export const getTypingStatus = async (req: Request, res: Response) => {
+    try {
+        if (!req.user) return res.status(401).json({ message: "Unauthorized" });
+
+        const id = reqParamId(req);
+        if (!id || !mongoose.Types.ObjectId.isValid(id)) return badId(res);
+
+        const conversation = await Conversation.findById(id);
+        if (!conversation) {
+            return res.status(404).json({ message: "Conversation not found" });
+        }
+        const me = req.user._id as mongoose.Types.ObjectId;
+        if (!userInConversation(conversation, me)) {
+            return res.status(403).json({ message: "Forbidden" });
+        }
+
+        const now = Date.now();
+        const conversationMap = typingState.get(id) ?? new Map<string, number>();
+        for (const [userId, expiresAt] of conversationMap.entries()) {
+            if (expiresAt <= now) conversationMap.delete(userId);
+        }
+        if (conversationMap.size === 0) {
+            typingState.delete(id);
+            return res.status(200).json({ users: [] });
+        }
+        typingState.set(id, conversationMap);
+
+        const myId = me.toString();
+        const otherUserIds = [...conversationMap.keys()].filter((userId) => userId !== myId);
+        if (otherUserIds.length === 0) return res.status(200).json({ users: [] });
+
+        const users = await User.find({ _id: { $in: otherUserIds } }).select("_id username");
+        return res.status(200).json({
+            users: users.map((user) => ({
+                _id: String(user._id),
+                username: user.username,
+            })),
+        });
+    } catch (error) {
+        return sendServerError(res, "getTypingStatus", error);
     }
 };

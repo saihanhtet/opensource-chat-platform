@@ -31,6 +31,10 @@ export const protectedRoutes = async (req: Request, res: Response, next:NextFunc
         const user = await User.findById(decoded.userId).select("-password");
         if (!user) return res.status(404).send("User not found");
 
+        user.status = "active";
+        user.lastSeenAt = new Date();
+        await user.save();
+
         req.user = user;
         next()
 

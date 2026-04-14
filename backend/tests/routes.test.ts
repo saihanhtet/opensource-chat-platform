@@ -11,6 +11,8 @@ import mongoose from "mongoose";
 import request from "supertest";
 
 import { createApp } from "../src/app.ts";
+import Team from "../src/models/team.model.ts";
+import TeamMember from "../src/models/teamMember.model.ts";
 import User from "../src/models/user.model.ts";
 import {
     clearDatabase,
@@ -25,7 +27,7 @@ const app = createApp();
 beforeAll(async () => {
     process.env.JWT_SECRET = "test-jwt-secret-key-for-integration-tests";
     process.env.CLIENT_URL = "http://localhost:5173";
-    process.env.NODE_ENV = "test";
+    (process.env as Record<string, string | undefined>).NODE_ENV = "test";
 
     mongo = await MongoMemoryServer.create();
     process.env.MONGODB_URI = mongo.getUri();
@@ -59,6 +61,26 @@ describe("Auth routes", () => {
         expect(res.body._id).toBeDefined();
         expect(res.body.email).toBe(c.email);
         expect(res.headers["set-cookie"]).toBeDefined();
+    });
+
+    test("POST /api/auth/sign-up creates a personal team for the user", async () => {
+        const c = uniqueUser();
+        const res = await request(app).post("/api/auth/sign-up").send(c);
+        expect(res.status).toBe(201);
+
+        const personalTeam = await Team.findOne({
+            createdBy: res.body._id,
+            teamType: "personal",
+        });
+        expect(personalTeam).toBeDefined();
+
+        const membership = await TeamMember.findOne({
+            teamId: personalTeam?._id,
+            userId: res.body._id,
+            status: "active",
+        });
+        expect(membership).toBeDefined();
+        expect(membership?.memberRole).toBe("member");
     });
 
     test("POST /api/auth/sign-up returns 409 for duplicate email", async () => {
@@ -105,6 +127,28 @@ describe("Auth routes", () => {
         expect(res.body.email).toBe(email);
         expect(res.body.role).toBe("user");
         expect(res.body.status).toBe("active");
+    });
+
+    test("GET /api/auth/users/by-username/:username returns matching user", async () => {
+        const target = await signUp(app, uniqueUser());
+        const requester = await signUp(app, uniqueUser());
+        const res = await requester.agent.get(
+            `/api/auth/users/by-username/${target.username}`
+        );
+        expect(res.status).toBe(200);
+        expect(res.body._id).toBe(target.userId);
+        expect(res.body.username).toBe(target.username);
+    });
+
+    test("POST /api/ai/rewrite rewrites text using default free model", async () => {
+        const { agent } = await signUp(app, uniqueUser());
+        const res = await agent.post("/api/ai/rewrite").send({
+            text: "hey can u send me the document asap",
+            model: "gemini-2.5-flash",
+        });
+        expect(res.status).toBe(200);
+        expect(res.body.rewrittenText).toContain("Formal:");
+        expect(res.body.model).toBe("gemini-2.0-flash");
     });
 
     test("POST /api/auth/sign-out clears session", async () => {
@@ -285,6 +329,34 @@ describe("Team routes", () => {
         const res = await agent.get("/api/teams/not-an-id");
         expect(res.status).toBe(400);
     });
+
+    test("GET /api/teams excludes personal teams and unrelated teams", async () => {
+        const owner = await signUp(app, uniqueUser());
+        const member = await signUp(app, uniqueUser());
+        const outsider = await signUp(app, uniqueUser());
+
+        const ownerGroup = await owner.agent.post("/api/teams").send({
+            teamName: "Owner Group",
+        });
+        expect(ownerGroup.status).toBe(201);
+
+        const outsiderGroup = await outsider.agent.post("/api/teams").send({
+            teamName: "Outsider Group",
+        });
+        expect(outsiderGroup.status).toBe(201);
+
+        const join = await owner.agent.post("/api/team-members").send({
+            teamId: ownerGroup.body._id,
+            userId: member.userId,
+        });
+        expect(join.status).toBe(201);
+
+        const memberList = await member.agent.get("/api/teams");
+        expect(memberList.status).toBe(200);
+        expect(memberList.body.length).toBe(1);
+        expect(memberList.body[0].teamName).toBe("Owner Group");
+        expect(memberList.body[0].teamType).toBe("group");
+    });
 });
 
 describe("Team member routes", () => {
@@ -333,6 +405,10 @@ describe("Team member routes", () => {
         );
         expect(res.status).toBe(200);
         expect(res.body.length).toBe(1);
+        expect(typeof res.body[0].userId).toBe("object");
+        expect(res.body[0].userId._id).toBe(joiner.userId);
+        expect(res.body[0].userId.username).toBeDefined();
+        expect(res.body[0].userId.email).toBeDefined();
     });
 
     test("member can remove themselves", async () => {
@@ -392,6 +468,29 @@ describe("Conversation routes", () => {
 
         const del = await a.agent.delete(`/api/conversations/${convId}`);
         expect(del.status).toBe(200);
+    });
+
+    test("typing status is visible to other participant", async () => {
+        const a = await signUp(app, uniqueUser());
+        const b = await signUp(app, uniqueUser());
+
+        const create = await a.agent.post("/api/conversations").send({
+            type: "direct",
+            participantIds: [a.userId, b.userId],
+        });
+        expect(create.status).toBe(201);
+        const convId = create.body._id;
+
+        const setTyping = await a.agent
+            .post(`/api/conversations/${convId}/typing`)
+            .send({ isTyping: true });
+        expect(setTyping.status).toBe(200);
+
+        const visibleToB = await b.agent.get(`/api/conversations/${convId}/typing`);
+        expect(visibleToB.status).toBe(200);
+        expect(visibleToB.body.users.length).toBe(1);
+        expect(visibleToB.body.users[0]._id).toBe(a.userId);
+        expect(visibleToB.body.users[0].username).toBe(a.username);
     });
 });
 
@@ -580,6 +679,21 @@ describe("Uploaded file routes", () => {
             fileName: "b.txt",
         });
         expect(res.status).toBe(403);
+    });
+
+    test("upload endpoint creates file metadata and linked message", async () => {
+        const { a, convId } = await convWithParticipant();
+        const upload = await a.agent
+            .post("/api/files/upload")
+            .field("conversationId", convId)
+            .field("content", "attached file")
+            .attach("file", Buffer.from("hello world"), "hello.txt");
+        expect(upload.status).toBe(201);
+        expect(upload.body.file).toBeDefined();
+        expect(upload.body.file.fileName).toBe("hello.txt");
+        expect(upload.body.message).toBeDefined();
+        expect(upload.body.message.fileUrl).toBeTruthy();
+        expect(upload.body.message.content).toBe("attached file");
     });
 });
 

@@ -1,22 +1,17 @@
 import express from "express";
 
-import {
-    createUploadedFile,
-    deleteUploadedFile,
-    getUploadedFileById,
-    listUploadedFiles,
-    updateUploadedFile,
-} from "../controllers/uploadedFile.controller.ts";
-import { protectedRoutes } from "../proxy/auth.proxy.ts";
+import * as uploadedFileController from "../controllers/uploadedFile.controller.ts";
+import { protectedRoutes, upload } from "../proxy/auth.proxy.ts";
 
 const router = express.Router();
 
 router.use(protectedRoutes);
 
-router.post("/", createUploadedFile);
-router.get("/", listUploadedFiles);
-router.get("/:id", getUploadedFileById);
-router.put("/:id", updateUploadedFile);
-router.delete("/:id", deleteUploadedFile);
+router.post("/", uploadedFileController.createUploadedFile);
+router.post("/upload", upload.single("file"), uploadedFileController.uploadChatFile);
+router.get("/", uploadedFileController.listUploadedFiles);
+router.get("/:id", uploadedFileController.getUploadedFileById);
+router.put("/:id", uploadedFileController.updateUploadedFile);
+router.delete("/:id", uploadedFileController.deleteUploadedFile);
 
 export default router;

@@ -1,8 +1,11 @@
 import type { Request, Response } from "express";
+import { unlink } from "fs/promises";
 import mongoose from "mongoose";
 
 import { reqParamId, sendServerError, sendValidationError } from "../lib/utils.ts";
+import cloud from "../lib/cloud.ts";
 import Conversation from "../models/conversation.model.ts";
+import Message from "../models/message.model.ts";
 import UploadedFile from "../models/uploadedFile.model.ts";
 import {
     createUploadedFileSchema,
@@ -45,6 +48,67 @@ export const createUploadedFile = async (req: Request, res: Response) => {
         return res.status(201).json(doc);
     } catch (error) {
         return sendServerError(res, "createUploadedFile", error);
+    }
+};
+
+export const uploadChatFile = async (req: Request, res: Response) => {
+    const tempUploadPath = req.file?.path;
+    try {
+        if (!req.user) return res.status(401).json({ message: "Unauthorized" });
+
+        const { conversationId, content } = req.body as {
+            conversationId?: string;
+            content?: string;
+        };
+        if (!conversationId || !mongoose.Types.ObjectId.isValid(conversationId)) {
+            return res.status(400).json({ message: "Invalid conversationId" });
+        }
+        if (!req.file) return res.status(400).json({ message: "File is required" });
+
+        const conversationObjectId = new mongoose.Types.ObjectId(conversationId);
+        const me = req.user._id as mongoose.Types.ObjectId;
+        if (!(await userInConversation(conversationObjectId, me))) {
+            return res.status(403).json({ message: "Forbidden" });
+        }
+
+        const uploaded =
+            process.env.NODE_ENV === "test"
+                ? { secure_url: `https://example.com/test-upload/${Date.now()}-${req.file.originalname}` }
+                : await cloud.uploader.upload(req.file.path, {
+                      resource_type: "auto",
+                      folder: "opensource-chat-platform/chat-files",
+                  });
+
+        const fileDoc = await UploadedFile.create({
+            uploadedBy: me,
+            conversationId: conversationObjectId,
+            fileName: req.file.originalname,
+            fileType: req.file.mimetype,
+            fileUrl: uploaded.secure_url,
+        });
+
+        const message = await Message.create({
+            conversationId: conversationObjectId,
+            senderId: me,
+            content: (content ?? "").trim(),
+            fileUrl: uploaded.secure_url,
+        });
+
+        const preview = message.content.slice(0, 500) || uploaded.secure_url.slice(0, 500);
+        await Conversation.findByIdAndUpdate(conversationObjectId, {
+            lastMessage: preview,
+        });
+
+        return res.status(201).json({
+            file: fileDoc,
+            message,
+        });
+    } catch (error) {
+        return sendServerError(res, "uploadChatFile", error);
+    } finally {
+        if (tempUploadPath) {
+            await unlink(tempUploadPath).catch(() => {});
+        }
     }
 };
 

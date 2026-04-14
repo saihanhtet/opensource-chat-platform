@@ -36,6 +36,10 @@ const userSchema = new mongoose.Schema(
             enum: ["active", "away", "offline", "suspended"],
             default: "active",
         },
+        lastSeenAt: {
+            type: Date,
+            default: Date.now,
+        },
         resetPasswordToken: {
             type: String,
             default: null,

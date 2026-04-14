@@ -81,7 +81,9 @@ export const listTeamMembers = async (req: Request, res: Response) => {
         if (typeof teamId === "string" && mongoose.Types.ObjectId.isValid(teamId)) {
             filter.teamId = new mongoose.Types.ObjectId(teamId);
         }
-        const members = await TeamMember.find(filter).sort({ joinedAt: -1 });
+        const members = await TeamMember.find(filter)
+            .populate("userId", "_id username email profilePic status lastSeenAt updatedAt")
+            .sort({ joinedAt: -1 });
         return res.status(200).json(members);
     } catch (error) {
         return sendServerError(res, "listTeamMembers", error);
