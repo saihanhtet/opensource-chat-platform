@@ -5,6 +5,18 @@ import * as React from "react"
 import { NavMain } from "@/components/sidebar/nav-main"
 import { NavUser } from "@/components/sidebar/nav-user"
 import { TeamSwitcher } from "@/components/sidebar/team-switcher"
+import { Button } from "@/components/ui/button"
+import { Input } from "@/components/ui/input"
+import { Label } from "@/components/ui/label"
+import {
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetFooter,
+  SheetHeader,
+  SheetTitle,
+} from "@/components/ui/sheet"
+import { Textarea } from "@/components/ui/textarea"
 import {
   createTeam,
   getCurrentUser,
@@ -55,6 +67,10 @@ export function AppSidebar({ onTeamDataChange, ...props }: AppSidebarProps) {
   const [activeTeamId, setActiveTeamId] = React.useState<string>()
   const [members, setMembers] = React.useState<TeamMember[]>([])
   const [personalMembers, setPersonalMembers] = React.useState<TeamMember[]>([])
+  const [createTeamOpen, setCreateTeamOpen] = React.useState(false)
+  const [creatingTeam, setCreatingTeam] = React.useState(false)
+  const [newTeamName, setNewTeamName] = React.useState("")
+  const [newTeamDescription, setNewTeamDescription] = React.useState("")
 
   React.useEffect(() => {
     const stored = window.localStorage.getItem("theme")
@@ -203,15 +219,21 @@ export function AppSidebar({ onTeamDataChange, ...props }: AppSidebarProps) {
     }
   }
 
-  const handleAddTeam = async () => {
-    const teamName = window.prompt("Team name")
-    if (!teamName || !teamName.trim()) return
+  const handleAddTeam = () => {
+    setCreateTeamOpen(true)
+  }
 
-    const description = window.prompt("Team description (optional)") ?? ""
+  const handleCreateTeamSubmit = async (event: React.FormEvent) => {
+    event.preventDefault()
+    if (!newTeamName.trim()) {
+      setError("Team name is required.")
+      return
+    }
+    setCreatingTeam(true)
     try {
       const createdTeam = await createTeam({
-        teamName: teamName.trim(),
-        description: description.trim(),
+        teamName: newTeamName.trim(),
+        description: newTeamDescription.trim(),
       })
       const nextTeam = {
         id: createdTeam._id,
@@ -221,11 +243,16 @@ export function AppSidebar({ onTeamDataChange, ...props }: AppSidebarProps) {
       }
       setTeams((prev) => [nextTeam, ...prev])
       await handleTeamChange(nextTeam.id)
+      setNewTeamName("")
+      setNewTeamDescription("")
+      setCreateTeamOpen(false)
     } catch (createError) {
       const message =
         createError instanceof Error ? createError.message : "Failed to create team."
       setError(message)
       onTeamDataChange?.({ members: [], error: message, loading: false })
+    } finally {
+      setCreatingTeam(false)
     }
   }
 
@@ -248,28 +275,64 @@ export function AppSidebar({ onTeamDataChange, ...props }: AppSidebarProps) {
     .filter((member) => member.id !== currentUserId)
 
   return (
-    <sidebar.Sidebar collapsible="icon" {...props}>
-      <sidebar.SidebarHeader>
-        <TeamSwitcher
-          teams={teams}
-          activeTeamId={activeTeamId}
-          onTeamChange={handleTeamChange}
-          onAddTeam={handleAddTeam}
-        />
-      </sidebar.SidebarHeader>
-      <sidebar.SidebarContent>
-        <NavMain users={mappedUsers} />
-        {loading ? (
-          <div className="px-4 py-2 text-sm text-muted-foreground">Loading...</div>
-        ) : null}
-        {error ? (
-          <div className="px-4 py-2 text-sm text-destructive">{error}</div>
-        ) : null}
-      </sidebar.SidebarContent>
-      <sidebar.SidebarFooter>
-        <NavUser user={user} theme={theme} onToggleTheme={toggleTheme} />
-      </sidebar.SidebarFooter>
-      <sidebar.SidebarRail />
-    </sidebar.Sidebar>
+    <>
+      <sidebar.Sidebar collapsible="icon" {...props}>
+        <sidebar.SidebarHeader>
+          <TeamSwitcher
+            teams={teams}
+            activeTeamId={activeTeamId}
+            onTeamChange={handleTeamChange}
+            onAddTeam={handleAddTeam}
+          />
+        </sidebar.SidebarHeader>
+        <sidebar.SidebarContent>
+          <NavMain users={mappedUsers} />
+          {loading ? (
+            <div className="px-4 py-2 text-sm text-muted-foreground">Loading...</div>
+          ) : null}
+          {error ? (
+            <div className="px-4 py-2 text-sm text-destructive">{error}</div>
+          ) : null}
+        </sidebar.SidebarContent>
+        <sidebar.SidebarFooter>
+          <NavUser user={user} theme={theme} onToggleTheme={toggleTheme} />
+        </sidebar.SidebarFooter>
+        <sidebar.SidebarRail />
+      </sidebar.Sidebar>
+      <Sheet open={createTeamOpen} onOpenChange={setCreateTeamOpen}>
+        <SheetContent side="right">
+          <SheetHeader>
+            <SheetTitle>Create Team</SheetTitle>
+            <SheetDescription>
+              Create a team and switch to it immediately.
+            </SheetDescription>
+          </SheetHeader>
+          <form className="flex flex-1 flex-col gap-4 px-4" onSubmit={handleCreateTeamSubmit}>
+            <div className="space-y-1">
+              <Label htmlFor="team-name">Team name</Label>
+              <Input
+                id="team-name"
+                value={newTeamName}
+                onChange={(event) => setNewTeamName(event.target.value)}
+              />
+            </div>
+            <div className="space-y-1">
+              <Label htmlFor="team-description">Description</Label>
+              <Textarea
+                id="team-description"
+                value={newTeamDescription}
+                onChange={(event) => setNewTeamDescription(event.target.value)}
+                placeholder="Optional team description"
+              />
+            </div>
+            <SheetFooter>
+              <Button type="submit" disabled={creatingTeam}>
+                {creatingTeam ? "Creating..." : "Create team"}
+              </Button>
+            </SheetFooter>
+          </form>
+        </SheetContent>
+      </Sheet>
+    </>
   )
 }

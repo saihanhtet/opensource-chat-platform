@@ -5,6 +5,7 @@ export type CurrentUser = {
   username: string
   email: string
   profilePic?: string
+  bio?: string
   status?: string
   lastSeenAt?: string
   updatedAt?: string
@@ -87,4 +88,33 @@ export async function createTeam(input: {
     body: JSON.stringify(input),
   })
   return parseJson<Team>(res)
+}
+
+export async function updateTeam(
+  teamId: string,
+  input: { teamName?: string; description?: string }
+): Promise<Team> {
+  const res = await fetch(apiUrl(`/api/teams/${teamId}`), {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    credentials: "include",
+    body: JSON.stringify(input),
+  })
+  return parseJson<Team>(res)
+}
+
+export async function updateTeamMember(
+  memberId: string,
+  input: {
+    memberRole?: "owner" | "admin" | "member"
+    status?: "pending" | "active" | "removed"
+  }
+): Promise<TeamMember> {
+  const res = await fetch(apiUrl(`/api/team-members/${memberId}`), {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    credentials: "include",
+    body: JSON.stringify(input),
+  })
+  return parseJson<TeamMember>(res)
 }

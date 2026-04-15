@@ -26,6 +26,12 @@ const userSchema = new mongoose.Schema(
             type: String,
             default: "",
         },
+        bio: {
+            type: String,
+            default: "",
+            trim: true,
+            maxlength: 500,
+        },
         role: {
             type: String,
             enum: ["user", "admin"],

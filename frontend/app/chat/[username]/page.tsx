@@ -2,9 +2,8 @@
 
 import * as React from "react"
 import { useParams } from "next/navigation"
-import { AppSidebar } from "@/components/sidebar/app-sidebar"
 import { Separator } from "@/components/ui/separator"
-import * as sidebar from "@/components/ui/sidebar"
+import { SidebarTrigger } from "@/components/ui/sidebar"
 import * as chatApi from "@/lib/chat-api"
 import { rewriteToFormal } from "@/lib/gemini-api"
 import { presenceLabel } from "@/lib/presence"
@@ -193,22 +192,20 @@ export default function ChatPage() {
   }
 
   return (
-    <sidebar.SidebarProvider>
-      <AppSidebar />
-      <sidebar.SidebarInset className="h-svh">
-        <header className="flex h-14 shrink-0 items-center gap-2 border-b px-4">
-          <sidebar.SidebarTrigger className="-ml-1" />
-          <Separator orientation="vertical" className="mr-2 h-full" />
-          <div className="flex items-center gap-2">
-            <span className={`size-2 rounded-full ${peerStatus === "active" ? "bg-emerald-500" : "bg-gray-400"}`} />
-            <h1 className="font-semibold">@{peerName || username}</h1>
-            <span className="text-xs text-muted-foreground">
-              {presenceLabel(peerStatus, peerLastSeenAt)}
-            </span>
-          </div>
-        </header>
+    <>
+      <header className="flex h-14 shrink-0 items-center gap-2 border-b px-4">
+        <SidebarTrigger className="-ml-1" />
+        <Separator orientation="vertical" className="mr-2 h-full" />
+        <div className="flex items-center gap-2">
+          <span className={`size-2 rounded-full ${peerStatus === "active" ? "bg-emerald-500" : "bg-gray-400"}`} />
+          <h1 className="font-semibold">@{peerName || username}</h1>
+          <span className="text-xs text-muted-foreground">
+            {presenceLabel(peerStatus, peerLastSeenAt)}
+          </span>
+        </div>
+      </header>
 
-        <div className="flex min-h-0 flex-1 flex-col bg-muted/30">
+      <div className="flex min-h-0 flex-1 flex-col bg-muted/30">
           {loading ? <p className="p-4 text-sm text-muted-foreground">Loading chat...</p> : null}
           {error ? <p className="p-4 text-sm text-destructive">{error}</p> : null}
 
@@ -302,7 +299,7 @@ export default function ChatPage() {
             </p>
           ) : null}
 
-          <form onSubmit={handleSend} className="border-t bg-background p-3">
+        <form onSubmit={handleSend} className="border-t bg-background p-3">
             <div className="rounded-2xl border bg-background">
               <input
                 value={draft}
@@ -354,9 +351,8 @@ export default function ChatPage() {
                 </button>
               </div>
             </div>
-          </form>
-        </div>
-      </sidebar.SidebarInset>
-    </sidebar.SidebarProvider>
+        </form>
+      </div>
+    </>
   )
 }

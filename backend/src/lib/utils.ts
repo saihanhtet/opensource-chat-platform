@@ -60,6 +60,7 @@ export const buildUserResponse = (user: UserDocument) => ({
     username: user.username,
     email: user.email,
     profilePic: user.profilePic,
+    bio: user.bio,
     role: user.role,
     status: user.status,
     lastSeenAt: user.lastSeenAt,

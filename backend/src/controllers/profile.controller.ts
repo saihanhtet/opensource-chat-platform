@@ -1,29 +1,32 @@
 import type { Request, Response } from "express";
+import bcrypt from "bcryptjs";
 import { unlink } from "fs/promises";
+import { MongoServerError } from "mongodb";
 import { z } from "zod";
-import cloud from "../lib/cloud"
+import cloud from "../lib/cloud";
 import User from "../models/user.model";
 
-import {ProfileUpdateSchema} from "../schemas/auth.schema";
-import {sendValidationError} from "../lib/utils.ts";
+import { changePasswordSchema, ProfileUpdateSchema } from "../schemas/auth.schema";
+import { sendValidationError } from "../lib/utils.ts";
 
 type ProfileUpdateInput = z.infer<typeof ProfileUpdateSchema>;
+type ChangePasswordInput = z.infer<typeof changePasswordSchema>;
 
 export const editProfile = async (
     req: Request,
     res: Response
 ) => {
     const tempUploadPath = req.file?.path;
-    try{
+    try {
         const parsed = ProfileUpdateSchema.safeParse(req.body);
         if (!parsed.success) {
             return sendValidationError(res, parsed.error);
         }
 
-        const { username, email }: ProfileUpdateInput = req.body;
+        const { username, email, bio }: ProfileUpdateInput = parsed.data;
 
         // check at least one field is provided
-        if  (!username && !email) {
+        if (!username && !email && bio === undefined && !req.file) {
             return res.status(400).json({
                 message: "Please update at least one field",
             });
@@ -34,6 +37,7 @@ export const editProfile = async (
 
         if (username) updateData.username = username;
         if (email) updateData.email = email;
+        if (bio !== undefined) updateData.bio = bio;
 
         if (req.file) {
             const response = await cloud.uploader.upload(req.file.path);
@@ -45,17 +49,51 @@ export const editProfile = async (
             { returnDocument: 'after' }
         ).select("-password");
 
-        return res.status(200).json({message: "Profile updated", user: updatedUser});
+        return res.status(200).json({ message: "Profile updated", user: updatedUser });
 
     } catch (error) {
+        if (error instanceof MongoServerError && error.code === 11000) {
+            return res.status(409).json({ message: "Username or email already exists" });
+        }
         console.error("Error at Updating the profile", error);
-        return res.status(500).json({error: "Internal Server Error"});
+        return res.status(500).json({ message: "Internal Server Error" });
     } finally {
         if (tempUploadPath) {
-            await unlink(tempUploadPath).catch(() => {});
+            await unlink(tempUploadPath).catch(() => { });
         }
     }
-}
+};
+
+export const changePassword = async (req: Request, res: Response) => {
+    try {
+        if (!req.user) return res.status(401).json({ message: "Unauthorized" });
+
+        const parsed = changePasswordSchema.safeParse(req.body);
+        if (!parsed.success) {
+            return sendValidationError(res, parsed.error);
+        }
+
+        const { currentPassword, newPassword }: ChangePasswordInput = parsed.data;
+        if (currentPassword === newPassword) {
+            return res.status(400).json({ message: "New password must be different" });
+        }
+
+        const user = await User.findById(req.user._id).select("+password");
+        if (!user) return res.status(404).json({ message: "User not found" });
+
+        const isCurrentPasswordValid = await bcrypt.compare(currentPassword, user.password);
+        if (!isCurrentPasswordValid) {
+            return res.status(400).json({ message: "Current password is incorrect" });
+        }
+
+        user.password = await bcrypt.hash(newPassword, 10);
+        await user.save();
+        return res.status(200).json({ message: "Password updated successfully" });
+    } catch (error) {
+        console.error("Error at changing password", error);
+        return res.status(500).json({ message: "Internal Server Error" });
+    }
+};
 
 export const getUserByUsername = async (req: Request, res: Response) => {
     try {
@@ -67,7 +105,7 @@ export const getUserByUsername = async (req: Request, res: Response) => {
         }
 
         const user = await User.findOne({ username }).select(
-            "_id username email profilePic status role lastSeenAt updatedAt"
+            "_id username email profilePic bio status role lastSeenAt updatedAt"
         );
         if (!user) return res.status(404).json({ message: "User not found" });
         return res.status(200).json(user);

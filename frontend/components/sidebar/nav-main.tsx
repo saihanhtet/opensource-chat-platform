@@ -3,6 +3,7 @@
 import * as sidebar from "@/components/ui/sidebar"
 import { Avatar, AvatarFallback, AvatarImage } from "../ui/avatar"
 import Link from "next/link"
+import { usePathname } from "next/navigation"
 import { presenceLabel } from "@/lib/presence"
 
 interface User {
@@ -19,6 +20,8 @@ export function NavMain({
 }: {
   users: User[]
 }) {
+  const pathname = usePathname()
+
   return (
     <sidebar.SidebarGroup>
       <sidebar.SidebarGroupLabel>Team Members</sidebar.SidebarGroupLabel>
@@ -35,6 +38,7 @@ export function NavMain({
             <sidebar.SidebarMenuButton
               asChild
               size="lg"
+              isActive={pathname === `/chat/${user.username}`}
               className="data-[state=open]:bg-sidebar-accent data-[state=open]:text-sidebar-accent-foreground"
             >
               <Link href={`/chat/${user.username}`}>
