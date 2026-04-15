@@ -212,22 +212,25 @@ export default function ChatPage() {
           {loading ? <p className="p-4 text-sm text-muted-foreground">Loading chat...</p> : null}
           {error ? <p className="p-4 text-sm text-destructive">{error}</p> : null}
 
-          <div ref={listRef} className="flex-1 space-y-3 overflow-y-auto p-4">
+          <div ref={listRef} className="flex-1 space-y-2 overflow-y-auto p-4">
             {messages.length === 0 && !loading ? (
               <p className="text-sm text-muted-foreground">No messages yet. Start the conversation.</p>
             ) : null}
             {messages.map((message) => {
               const isMine = message.senderId === myUserId
+              const isAudioAttachment =
+                !!message.fileUrl && attachmentKind(message.fileUrl) === "audio"
               return (
-                <div
-                  key={message._id}
-                  className={`flex ${isMine ? "justify-end" : "justify-start"}`}
-                >
+                <div key={message._id} className={`flex ${isMine ? "justify-end" : "justify-start"}`}>
                   <div
-                    className={`max-w-[75%] rounded-2xl px-3 py-2 text-sm ${
+                    className={`px-3 py-2 text-sm shadow-sm ${
                       isMine
-                        ? "bg-primary text-primary-foreground"
-                        : "bg-background border"
+                        ? "rounded-2xl rounded-br-md bg-primary text-primary-foreground"
+                        : "rounded-2xl rounded-bl-md border bg-background text-foreground"
+                    } ${
+                      isAudioAttachment
+                        ? "w-[min(22rem,82vw)]"
+                        : "max-w-[78%]"
                     }`}
                   >
                     {message.content ? <p>{message.content}</p> : null}
@@ -252,8 +255,16 @@ export default function ChatPage() {
                         ) : null}
 
                         {attachmentKind(message.fileUrl) === "audio" ? (
-                          <div className={`rounded-lg p-2 ${isMine ? "bg-primary-foreground/20" : "bg-muted"}`}>
-                            <audio controls className="w-full" src={message.fileUrl} />
+                          <div
+                            className={`w-full rounded-lg p-2 ${
+                              isMine ? "bg-primary-foreground/20" : "bg-muted"
+                            }`}
+                          >
+                            <audio
+                              controls
+                              className="block w-full max-w-full"
+                              src={message.fileUrl}
+                            />
                           </div>
                         ) : null}
 

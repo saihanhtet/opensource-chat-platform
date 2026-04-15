@@ -18,7 +18,15 @@ interface User {
   avatar: string
 }
 
-export function NavUser({ user }: { user: User }) {
+export function NavUser({
+  user,
+  theme,
+  onToggleTheme,
+}: {
+  user: User
+  theme: "light" | "dark"
+  onToggleTheme: () => void
+}) {
   const { isMobile } = sidebar.useSidebar()
   const router = useRouter()
 
@@ -75,6 +83,14 @@ export function NavUser({ user }: { user: User }) {
                   <remixicon.RiCheckboxCircleLine />
                   Account
                 </Link>
+              </dropdownMenu.DropdownMenuItem>
+              <dropdownMenu.DropdownMenuItem onClick={onToggleTheme}>
+                {theme === "dark" ? (
+                  <remixicon.RiSunLine />
+                ) : (
+                  <remixicon.RiMoonClearLine />
+                )}
+                {theme === "dark" ? "Light mode" : "Dark mode"}
               </dropdownMenu.DropdownMenuItem>
               <dropdownMenu.DropdownMenuItem>
                 <remixicon.RiNotificationLine

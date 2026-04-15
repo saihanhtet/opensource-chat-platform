@@ -140,7 +140,7 @@ describe("Auth routes", () => {
         expect(res.body.username).toBe(target.username);
     });
 
-    test("POST /api/ai/rewrite rewrites text using default free model", async () => {
+    test("POST /api/ai/rewrite rewrites text using default model", async () => {
         const { agent } = await signUp(app, uniqueUser());
         const res = await agent.post("/api/ai/rewrite").send({
             text: "hey can u send me the document asap",
@@ -148,7 +148,7 @@ describe("Auth routes", () => {
         });
         expect(res.status).toBe(200);
         expect(res.body.rewrittenText).toContain("Formal:");
-        expect(res.body.model).toBe("gemini-2.0-flash");
+        expect(res.body.model).toBe("gemini-2.5-flash");
     });
 
     test("POST /api/auth/sign-out clears session", async () => {

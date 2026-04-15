@@ -40,6 +40,7 @@ type AppSidebarProps = React.ComponentProps<typeof sidebar.Sidebar> & {
 }
 
 export function AppSidebar({ onTeamDataChange, ...props }: AppSidebarProps) {
+  const [theme, setTheme] = React.useState<"light" | "dark">("light")
   const [loading, setLoading] = React.useState(true)
   const [error, setError] = React.useState<string>()
   const [currentUserId, setCurrentUserId] = React.useState("")
@@ -54,6 +55,18 @@ export function AppSidebar({ onTeamDataChange, ...props }: AppSidebarProps) {
   const [activeTeamId, setActiveTeamId] = React.useState<string>()
   const [members, setMembers] = React.useState<TeamMember[]>([])
   const [personalMembers, setPersonalMembers] = React.useState<TeamMember[]>([])
+
+  React.useEffect(() => {
+    const stored = window.localStorage.getItem("theme")
+    const prefersDark = window.matchMedia("(prefers-color-scheme: dark)").matches
+    const resolvedTheme = stored === "dark" || stored === "light"
+      ? stored
+      : prefersDark
+        ? "dark"
+        : "light"
+    setTheme(resolvedTheme)
+    document.documentElement.classList.toggle("dark", resolvedTheme === "dark")
+  }, [])
 
   React.useEffect(() => {
     let mounted = true
@@ -216,6 +229,13 @@ export function AppSidebar({ onTeamDataChange, ...props }: AppSidebarProps) {
     }
   }
 
+  const toggleTheme = () => {
+    const nextTheme = theme === "dark" ? "light" : "dark"
+    setTheme(nextTheme)
+    window.localStorage.setItem("theme", nextTheme)
+    document.documentElement.classList.toggle("dark", nextTheme === "dark")
+  }
+
   const mappedUsers = members
     .map((member) => ({
       id: member.userId?._id ?? member._id,
@@ -247,7 +267,7 @@ export function AppSidebar({ onTeamDataChange, ...props }: AppSidebarProps) {
         ) : null}
       </sidebar.SidebarContent>
       <sidebar.SidebarFooter>
-        <NavUser user={user} />
+        <NavUser user={user} theme={theme} onToggleTheme={toggleTheme} />
       </sidebar.SidebarFooter>
       <sidebar.SidebarRail />
     </sidebar.Sidebar>

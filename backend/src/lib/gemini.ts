@@ -1,12 +1,21 @@
 import { GoogleGenAI } from "@google/genai";
 
-const DEFAULT_MODEL = "gemini-2.0-flash";
+const DEFAULT_MODEL = "gemini-2.5-flash";
 
 export class GeminiQuotaError extends Error {
     retryAfterSeconds?: number;
     constructor(message: string, retryAfterSeconds?: number) {
         super(message);
         this.name = "GeminiQuotaError";
+        this.retryAfterSeconds = retryAfterSeconds;
+    }
+}
+
+export class GeminiUnavailableError extends Error {
+    retryAfterSeconds?: number;
+    constructor(message: string, retryAfterSeconds?: number) {
+        super(message);
+        this.name = "GeminiUnavailableError";
         this.retryAfterSeconds = retryAfterSeconds;
     }
 }
@@ -41,17 +50,25 @@ export async function rewriteFormalText(input: {
     }).catch((error: unknown) => {
         const maybeStatus = (error as { status?: number } | undefined)?.status;
         const maybeMessage = (error as { message?: string } | undefined)?.message ?? "";
+        const retryMatch =
+            maybeMessage.match(/retryDelay":"(\d+)s"/) ??
+            maybeMessage.match(/Please retry in ([\d.]+)s/);
+        const retryAfterSeconds = retryMatch
+            ? Math.ceil(Number(retryMatch[1]))
+            : undefined;
         if (maybeStatus === 429 || maybeMessage.includes("RESOURCE_EXHAUSTED")) {
-            const retryMatch =
-                maybeMessage.match(/retryDelay":"(\d+)s"/) ??
-                maybeMessage.match(/Please retry in ([\d.]+)s/);
-            const retryAfterSeconds = retryMatch
-                ? Math.ceil(Number(retryMatch[1]))
-                : undefined;
             throw new GeminiQuotaError(
                 retryAfterSeconds
                     ? `Gemini quota exceeded. Please retry in about ${retryAfterSeconds}s.`
                     : "Gemini quota exceeded. Please retry shortly.",
+                retryAfterSeconds
+            );
+        }
+        if (maybeStatus === 503 || maybeMessage.includes("\"status\":\"UNAVAILABLE\"")) {
+            throw new GeminiUnavailableError(
+                retryAfterSeconds
+                    ? `Gemini is temporarily unavailable. Please retry in about ${retryAfterSeconds}s.`
+                    : "Gemini is temporarily unavailable. Please try again shortly.",
                 retryAfterSeconds
             );
         }

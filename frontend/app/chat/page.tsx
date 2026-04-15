@@ -21,7 +21,7 @@ export default function ChatIndexPage() {
           <p className="text-sm text-muted-foreground">
             Select a teammate from the sidebar to open a direct message.
           </p>
-          <Link href="/dashboard" className="mt-4 text-sm underline">
+          <Link href="/" className="mt-4 text-sm underline">
             Go to dashboard
           </Link>
         </div>
