@@ -9,28 +9,89 @@ import {
 } from "../lib/utils.ts";
 import Team from "../models/team.model.ts";
 import TeamMember from "../models/teamMember.model.ts";
+import User from "../models/user.model.ts";
+import type { TeamDocument } from "../models/team.model.ts";
 import {
     createTeamMemberSchema,
     updateTeamMemberSchema,
 } from "../schemas/teamMember.schema.ts";
 
+type TeamRole = "owner" | "admin" | "moderator" | "member";
+
 const badId = (res: Response) =>
     res.status(400).json({ message: "Invalid id" });
 
-const canManageTeamMember = async (
+const defaultStatusManagementPermissions: Record<TeamRole, TeamRole[]> = {
+    owner: ["owner", "admin", "moderator", "member"],
+    admin: ["moderator", "member"],
+    moderator: ["member"],
+    member: [],
+};
+
+const getStatusManagementPermissions = (
+    team: TeamDocument | null
+): Record<TeamRole, TeamRole[]> => {
+    const configured = team?.rolePermissions?.statusManagement;
+    return {
+        owner: configured?.owner ?? defaultStatusManagementPermissions.owner,
+        admin: configured?.admin ?? defaultStatusManagementPermissions.admin,
+        moderator: configured?.moderator ?? defaultStatusManagementPermissions.moderator,
+        member: configured?.member ?? defaultStatusManagementPermissions.member,
+    };
+};
+
+const getRequesterRole = async (
+    team: TeamDocument | null,
     teamId: mongoose.Types.ObjectId,
     userId: mongoose.Types.ObjectId
-) => {
-    const team = await Team.findById(teamId);
-    if (!team) return false;
-    if (team.createdBy.equals(userId)) return true;
+): Promise<TeamRole | null> => {
+    if (!team) return null;
+    if (team.createdBy.equals(userId)) return "owner";
     const membership = await TeamMember.findOne({
         teamId,
         userId,
         status: "active",
-        memberRole: { $in: ["owner", "admin"] },
-    });
-    return !!membership;
+    }).select("memberRole");
+    if (!membership) return null;
+    return membership.memberRole as TeamRole;
+};
+
+const canManageTeamMember = async (
+    team: TeamDocument | null,
+    teamId: mongoose.Types.ObjectId,
+    userId: mongoose.Types.ObjectId
+) => {
+    const requesterRole = await getRequesterRole(team, teamId, userId);
+    return requesterRole === "owner" || requesterRole === "admin";
+};
+
+const canRequesterManageTarget = (
+    requesterRole: TeamRole,
+    targetRole: TeamRole,
+    team: TeamDocument | null
+): boolean => {
+    const permissions = getStatusManagementPermissions(team);
+    return permissions[requesterRole].includes(targetRole);
+};
+
+const resolveUserId = async (
+    userId?: string,
+    identifier?: string
+): Promise<mongoose.Types.ObjectId | null> => {
+    if (userId) {
+        return new mongoose.Types.ObjectId(userId);
+    }
+    if (!identifier) return null;
+
+    const normalized = identifier.trim();
+    const byEmail = await User.findOne({
+        email: normalized.toLowerCase(),
+    }).select("_id");
+    if (byEmail) return byEmail._id as mongoose.Types.ObjectId;
+
+    const byUsername = await User.findOne({ username: normalized }).select("_id");
+    if (byUsername) return byUsername._id as mongoose.Types.ObjectId;
+    return null;
 };
 
 export const createTeamMember = async (req: Request, res: Response) => {
@@ -40,30 +101,43 @@ export const createTeamMember = async (req: Request, res: Response) => {
         const parsed = createTeamMemberSchema.safeParse(req.body);
         if (!parsed.success) return sendValidationError(res, parsed.error);
 
-        const { teamId, userId, memberRole, status } = parsed.data;
+        const { teamId, userId, identifier, memberRole, status } = parsed.data;
         const teamObjectId = new mongoose.Types.ObjectId(teamId);
-        const userObjectId = new mongoose.Types.ObjectId(userId);
+        const userObjectId = await resolveUserId(userId, identifier);
+        if (!userObjectId) {
+            return res.status(404).json({ message: "User not found" });
+        }
+        const team = await Team.findById(teamObjectId);
+        if (!team) return res.status(404).json({ message: "Team not found" });
 
         const requesterId = req.user._id as mongoose.Types.ObjectId;
-
         const joiningSelf = requesterId.equals(userObjectId);
-        const isTeamCreator = await Team.exists({
-            _id: teamObjectId,
-            createdBy: requesterId,
-        });
-        const canInvite = await canManageTeamMember(teamObjectId, requesterId);
+        const targetRole = (memberRole ?? "member") as TeamRole;
 
-        if (!joiningSelf && !isTeamCreator && !canInvite) {
+        if (!joiningSelf) {
+            const requesterRole = await getRequesterRole(team, teamObjectId, requesterId);
+            const canInvite = await canManageTeamMember(team, teamObjectId, requesterId);
+            if (!requesterRole || !canInvite) {
+                return res.status(403).json({ message: "Forbidden" });
+            }
+            if (!canRequesterManageTarget(requesterRole, targetRole, team)) {
+                return res.status(403).json({ message: "Cannot assign this role" });
+            }
+        }
+
+        if (joiningSelf && targetRole !== "member") {
             return res.status(403).json({ message: "Forbidden" });
         }
 
         const member = await TeamMember.create({
             teamId: teamObjectId,
             userId: userObjectId,
-            memberRole: memberRole ?? "member",
+            memberRole: joiningSelf ? "member" : (memberRole ?? "member"),
             status: status ?? "active",
         });
-        return res.status(201).json(member);
+        const populated = await TeamMember.findById(member._id)
+            .populate("userId", "_id username email profilePic status lastSeenAt updatedAt");
+        return res.status(201).json(populated);
     } catch (error) {
         if (isDuplicateKeyError(error)) {
             return res.status(409).json({
@@ -115,21 +189,40 @@ export const updateTeamMember = async (req: Request, res: Response) => {
 
         const member = await TeamMember.findById(id);
         if (!member) return res.status(404).json({ message: "Team member not found" });
+        const team = await Team.findById(member.teamId);
+        if (!team) return res.status(404).json({ message: "Team not found" });
 
         const requesterId = req.user._id as mongoose.Types.ObjectId;
         const isSelf = member.userId.equals(requesterId);
-        const canManage = await canManageTeamMember(member.teamId, requesterId);
+        const requesterRole = await getRequesterRole(team, member.teamId, requesterId);
+        if (!requesterRole) return res.status(403).json({ message: "Forbidden" });
+        const targetRole = member.userId.equals(team.createdBy)
+            ? "owner"
+            : (member.memberRole as TeamRole);
 
-        if (!isSelf && !canManage) {
+        if (isSelf) {
+            if (parsed.data.memberRole || parsed.data.status) {
+                return res.status(403).json({ message: "Cannot change your own role or status" });
+            }
+            return res.status(200).json(member);
+        }
+        if (!canRequesterManageTarget(requesterRole, targetRole, team)) {
             return res.status(403).json({ message: "Forbidden" });
         }
-        if (isSelf && parsed.data.memberRole) {
-            return res.status(403).json({ message: "Cannot change your own role" });
+        if (parsed.data.memberRole) {
+            if (!canRequesterManageTarget(requesterRole, parsed.data.memberRole as TeamRole, team)) {
+                return res.status(403).json({ message: "Cannot assign this role" });
+            }
+            if (isSelf && parsed.data.memberRole !== member.memberRole) {
+                return res.status(403).json({ message: "Cannot change your own role" });
+            }
         }
 
         Object.assign(member, parsed.data);
         await member.save();
-        return res.status(200).json(member);
+        const populated = await TeamMember.findById(member._id)
+            .populate("userId", "_id username email profilePic status lastSeenAt updatedAt");
+        return res.status(200).json(populated);
     } catch (error) {
         return sendServerError(res, "updateTeamMember", error);
     }
@@ -144,12 +237,18 @@ export const deleteTeamMember = async (req: Request, res: Response) => {
 
         const member = await TeamMember.findById(id);
         if (!member) return res.status(404).json({ message: "Team member not found" });
+        const team = await Team.findById(member.teamId);
+        if (!team) return res.status(404).json({ message: "Team not found" });
 
         const requesterId = req.user._id as mongoose.Types.ObjectId;
         const isSelf = member.userId.equals(requesterId);
-        const canManage = await canManageTeamMember(member.teamId, requesterId);
+        const requesterRole = await getRequesterRole(team, member.teamId, requesterId);
+        if (!requesterRole) return res.status(403).json({ message: "Forbidden" });
+        const targetRole = member.userId.equals(team.createdBy)
+            ? "owner"
+            : (member.memberRole as TeamRole);
 
-        if (!isSelf && !canManage) {
+        if (!isSelf && !canRequesterManageTarget(requesterRole, targetRole, team)) {
             return res.status(403).json({ message: "Forbidden" });
         }
 

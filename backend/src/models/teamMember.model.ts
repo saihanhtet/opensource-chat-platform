@@ -15,7 +15,7 @@ const teamMemberSchema = new mongoose.Schema(
         },
         memberRole: {
             type: String,
-            enum: ["owner", "admin", "member"],
+            enum: ["owner", "admin", "moderator", "member"],
             default: "member",
         },
         status: {

@@ -17,19 +17,23 @@ interface User {
 
 export function NavMain({
   users,
+  label = "Team Members",
+  emptyMessage = "No users in this team yet",
 }: {
   users: User[]
+  label?: string
+  emptyMessage?: string
 }) {
   const pathname = usePathname()
 
   return (
     <sidebar.SidebarGroup>
-      <sidebar.SidebarGroupLabel>Team Members</sidebar.SidebarGroupLabel>
+      <sidebar.SidebarGroupLabel>{label}</sidebar.SidebarGroupLabel>
       <sidebar.SidebarMenu>
         {users.length === 0 ? (
           <sidebar.SidebarMenuItem>
             <sidebar.SidebarMenuButton size="lg" disabled>
-              No users in this team yet
+              {emptyMessage}
             </sidebar.SidebarMenuButton>
           </sidebar.SidebarMenuItem>
         ) : null}

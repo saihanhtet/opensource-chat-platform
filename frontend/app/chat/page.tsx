@@ -9,6 +9,9 @@ export default function ChatIndexPage() {
         <SidebarTrigger className="-ml-1" />
         <Separator orientation="vertical" className="mr-2 h-4" />
         <h1 className="font-semibold">Chats</h1>
+        <span className="ml-2 rounded-full border px-2 py-0.5 text-xs text-muted-foreground">
+          No Team (Personal)
+        </span>
       </header>
       <div className="flex min-h-0 flex-1 flex-col p-6">
         <p className="text-sm text-muted-foreground">

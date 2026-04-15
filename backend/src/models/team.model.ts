@@ -23,6 +23,30 @@ const teamSchema = new mongoose.Schema(
             ref: "User",
             required: true,
         },
+        rolePermissions: {
+            statusManagement: {
+                owner: {
+                    type: [String],
+                    enum: ["owner", "admin", "moderator", "member"],
+                    default: ["owner", "admin", "moderator", "member"],
+                },
+                admin: {
+                    type: [String],
+                    enum: ["owner", "admin", "moderator", "member"],
+                    default: ["moderator", "member"],
+                },
+                moderator: {
+                    type: [String],
+                    enum: ["owner", "admin", "moderator", "member"],
+                    default: ["member"],
+                },
+                member: {
+                    type: [String],
+                    enum: ["owner", "admin", "moderator", "member"],
+                    default: [],
+                },
+            },
+        },
     },
     { timestamps: true }
 );

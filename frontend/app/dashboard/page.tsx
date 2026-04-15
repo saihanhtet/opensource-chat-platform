@@ -20,32 +20,60 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import {
+  addTeamMemberByIdentifier,
+  getTeamById,
+  getTeamMembers,
+  type Team,
   type TeamMember,
   updateTeam,
   updateTeamMember,
 } from "@/lib/team-api"
 
+type TeamRole = "owner" | "admin" | "moderator" | "member"
+const teamRoles: TeamRole[] = ["owner", "admin", "moderator", "member"]
+
 export default function Page() {
   const [selectedTeamId, setSelectedTeamId] = React.useState<string>()
   const [selectedTeamName, setSelectedTeamName] = React.useState<string>()
+  const [selectedTeam, setSelectedTeam] = React.useState<Team>()
+  const [currentUserId, setCurrentUserId] = React.useState<string>()
+  const [currentUserRole, setCurrentUserRole] = React.useState<TeamRole>()
   const [teamNameDraft, setTeamNameDraft] = React.useState("")
+  const [addMemberIdentifier, setAddMemberIdentifier] = React.useState("")
+  const [addMemberRole, setAddMemberRole] = React.useState<TeamRole>("member")
   const [members, setMembers] = React.useState<TeamMember[]>([])
   const [search, setSearch] = React.useState("")
   const [loading, setLoading] = React.useState(true)
   const [savingTeamName, setSavingTeamName] = React.useState(false)
+  const [addingMember, setAddingMember] = React.useState(false)
+  const [savingPermissions, setSavingPermissions] = React.useState(false)
   const [updatingMemberId, setUpdatingMemberId] = React.useState<string>()
+  const [statusPermissions, setStatusPermissions] = React.useState<
+    Record<TeamRole, TeamRole[]>
+  >({
+    owner: ["owner", "admin", "moderator", "member"],
+    admin: ["moderator", "member"],
+    moderator: ["member"],
+    member: [],
+  })
   const [error, setError] = React.useState<string>()
   const [actionMessage, setActionMessage] = React.useState<string>()
   const handleTeamDataChange = React.useCallback(
     (data: {
       selectedTeamId?: string
       selectedTeamName?: string
+      selectedTeam?: Team
+      currentUserId?: string
+      currentUserRole?: TeamRole
       members: TeamMember[]
       loading: boolean
       error?: string
     }) => {
       setSelectedTeamId(data.selectedTeamId)
       setSelectedTeamName(data.selectedTeamName)
+      setSelectedTeam(data.selectedTeam)
+      setCurrentUserId(data.currentUserId)
+      setCurrentUserRole(data.currentUserRole)
       setTeamNameDraft(data.selectedTeamName ?? "")
       setMembers(data.members)
       setLoading(data.loading)
@@ -62,7 +90,54 @@ export default function Page() {
       return username.includes(searchTerm) || email.includes(searchTerm)
     })
   }, [members, search])
-  const canEditTeam = Boolean(selectedTeamId && !selectedTeamId.startsWith("personal:"))
+  const canEditTeam = Boolean(selectedTeamId)
+
+  React.useEffect(() => {
+    if (!selectedTeamId) {
+      setStatusPermissions({
+        owner: ["owner", "admin", "moderator", "member"],
+        admin: ["moderator", "member"],
+        moderator: ["member"],
+        member: [],
+      })
+      return
+    }
+    void getTeamById(selectedTeamId)
+      .then((team) => {
+        setSelectedTeam(team)
+        setStatusPermissions({
+          owner: team.rolePermissions?.statusManagement?.owner ?? ["owner", "admin", "moderator", "member"],
+          admin: team.rolePermissions?.statusManagement?.admin ?? ["moderator", "member"],
+          moderator: team.rolePermissions?.statusManagement?.moderator ?? ["member"],
+          member: team.rolePermissions?.statusManagement?.member ?? [],
+        })
+      })
+      .catch(() => {
+        // keep existing values if team details fail to load
+      })
+  }, [selectedTeamId])
+
+  const roleRank: Record<TeamRole, number> = {
+    owner: 4,
+    admin: 3,
+    moderator: 2,
+    member: 1,
+  }
+
+  const canManageTarget = (targetRole: TeamRole) =>
+    currentUserRole ? statusPermissions[currentUserRole].includes(targetRole) : false
+
+  const getTargetRole = (member: TeamMember): TeamRole => {
+    if (selectedTeam?.createdBy === member.userId?._id) return "owner"
+    return member.memberRole
+  }
+
+  const canEditMember = (member: TeamMember) => {
+    if (!currentUserRole || !currentUserId) return false
+    if (member.userId?._id === currentUserId) return false
+    const targetRole = getTargetRole(member)
+    return canManageTarget(targetRole) && roleRank[currentUserRole] > roleRank[targetRole]
+  }
 
   const handleTeamNameSave = async () => {
     if (!selectedTeamId || !canEditTeam) return
@@ -99,6 +174,78 @@ export default function Page() {
     }
   }
 
+  const handleMemberRoleChange = async (memberId: string, nextRole: TeamRole) => {
+    setUpdatingMemberId(memberId)
+    setError(undefined)
+    setActionMessage(undefined)
+    try {
+      const updated = await updateTeamMember(memberId, { memberRole: nextRole })
+      setMembers((prev) => prev.map((member) => (member._id === memberId ? updated : member)))
+      setActionMessage("Member role updated.")
+    } catch (roleError) {
+      setError(roleError instanceof Error ? roleError.message : "Failed to update member role.")
+    } finally {
+      setUpdatingMemberId(undefined)
+    }
+  }
+
+  const handleAddMember = async (event: React.FormEvent) => {
+    event.preventDefault()
+    if (!selectedTeamId) return
+    setAddingMember(true)
+    setError(undefined)
+    setActionMessage(undefined)
+    try {
+      await addTeamMemberByIdentifier({
+        teamId: selectedTeamId,
+        identifier: addMemberIdentifier.trim(),
+        memberRole: addMemberRole,
+      })
+      const refreshedMembers = await getTeamMembers(selectedTeamId)
+      setMembers(refreshedMembers)
+      setAddMemberIdentifier("")
+      setAddMemberRole("member")
+      setActionMessage("Member added successfully.")
+    } catch (addError) {
+      setError(addError instanceof Error ? addError.message : "Failed to add member.")
+    } finally {
+      setAddingMember(false)
+    }
+  }
+
+  const togglePermission = (controller: TeamRole, target: TeamRole) => {
+    setStatusPermissions((prev) => {
+      const current = prev[controller]
+      return {
+        ...prev,
+        [controller]: current.includes(target)
+          ? current.filter((item) => item !== target)
+          : [...current, target],
+      }
+    })
+  }
+
+  const handleSavePermissions = async () => {
+    if (!selectedTeamId) return
+    setSavingPermissions(true)
+    setError(undefined)
+    setActionMessage(undefined)
+    try {
+      await updateTeam(selectedTeamId, {
+        rolePermissions: { statusManagement: statusPermissions },
+      })
+      setActionMessage("Role permissions updated.")
+    } catch (permissionError) {
+      setError(
+        permissionError instanceof Error
+          ? permissionError.message
+          : "Failed to update role permissions."
+      )
+    } finally {
+      setSavingPermissions(false)
+    }
+  }
+
   return (
     <SidebarProvider>
       <AppSidebar onTeamDataChange={handleTeamDataChange} />
@@ -119,7 +266,7 @@ export default function Page() {
                 </BreadcrumbItem>
                 <BreadcrumbSeparator className="hidden md:block" />
                 <BreadcrumbItem>
-                  <BreadcrumbPage>{selectedTeamName ?? "Select a Team"}</BreadcrumbPage>
+                  <BreadcrumbPage>{selectedTeamName ?? "No Team (Personal)"}</BreadcrumbPage>
                 </BreadcrumbItem>
               </BreadcrumbList>
             </Breadcrumb>
@@ -129,7 +276,7 @@ export default function Page() {
           <div className="grid auto-rows-min gap-4 md:grid-cols-3">
             <div className="rounded-xl bg-muted/50 p-4">
               <p className="text-sm text-muted-foreground">Selected Team</p>
-              <p className="mt-2 text-xl font-semibold">{selectedTeamName ?? "N/A"}</p>
+              <p className="mt-2 text-xl font-semibold">{selectedTeamName ?? "No Team (Personal)"}</p>
             </div>
             <div className="rounded-xl bg-muted/50 p-4">
               <p className="text-sm text-muted-foreground">Members</p>
@@ -147,6 +294,12 @@ export default function Page() {
           </div>
           <div className="min-h-screen flex-1 rounded-xl bg-muted/50 p-4 md:min-h-min">
             <h2 className="mb-4 text-lg font-semibold">Team Users</h2>
+            {!selectedTeamId ? (
+              <p className="text-sm text-muted-foreground">
+                You are in No Team (Personal). Dashboard team controls are hidden until you select a team.
+              </p>
+            ) : null}
+            {selectedTeamId ? (
             <div className="mb-4 grid gap-3 md:grid-cols-2">
               <div className="space-y-1">
                 <Label htmlFor="team-name-edit">Team Name</Label>
@@ -175,6 +328,66 @@ export default function Page() {
                 />
               </div>
             </div>
+            ) : null}
+            {selectedTeamId && (currentUserRole === "owner" || currentUserRole === "admin") ? (
+              <form onSubmit={handleAddMember} className="mb-4 grid gap-3 rounded-md border p-3 md:grid-cols-3">
+                <div className="space-y-1 md:col-span-2">
+                  <Label htmlFor="member-identifier">Add member (username or email)</Label>
+                  <Input
+                    id="member-identifier"
+                    value={addMemberIdentifier}
+                    onChange={(event) => setAddMemberIdentifier(event.target.value)}
+                    placeholder="username or email"
+                  />
+                </div>
+                <div className="space-y-1">
+                  <Label htmlFor="member-role">Role</Label>
+                  <div className="flex gap-2">
+                    <select
+                      id="member-role"
+                      className="h-9 w-full rounded-md border bg-background px-2 text-sm"
+                      value={addMemberRole}
+                      onChange={(event) => setAddMemberRole(event.target.value as TeamRole)}
+                    >
+                      <option value="member">Member</option>
+                      <option value="moderator">Moderator</option>
+                      <option value="admin">Admin</option>
+                    </select>
+                    <Button type="submit" disabled={addingMember || !addMemberIdentifier.trim()}>
+                      {addingMember ? "Adding..." : "Add"}
+                    </Button>
+                  </div>
+                </div>
+              </form>
+            ) : null}
+            {selectedTeamId && (currentUserRole === "owner" || currentUserRole === "admin") ? (
+              <div className="mb-4 rounded-md border p-3">
+                <p className="mb-2 text-sm font-medium">Role Access Control</p>
+                <p className="mb-3 text-xs text-muted-foreground">
+                  Select which target roles each role can change status for.
+                </p>
+                {(["admin", "moderator"] as const).map((controller) => (
+                  <div key={controller} className="mb-2 flex items-center gap-3">
+                    <span className="w-20 text-sm capitalize">{controller}</span>
+                    <div className="flex flex-wrap gap-2">
+                      {teamRoles.map((target) => (
+                        <label key={`${controller}-${target}`} className="flex items-center gap-1 text-xs">
+                          <input
+                            type="checkbox"
+                            checked={statusPermissions[controller].includes(target)}
+                            onChange={() => togglePermission(controller, target)}
+                          />
+                          <span className="capitalize">{target}</span>
+                        </label>
+                      ))}
+                    </div>
+                  </div>
+                ))}
+                <Button onClick={handleSavePermissions} disabled={savingPermissions}>
+                  {savingPermissions ? "Saving..." : "Save role permissions"}
+                </Button>
+              </div>
+            ) : null}
             {actionMessage ? <p className="mb-2 text-sm text-emerald-600">{actionMessage}</p> : null}
             {loading ? <p className="text-sm text-muted-foreground">Loading users...</p> : null}
             {error ? <p className="text-sm text-destructive">{error}</p> : null}
@@ -193,11 +406,26 @@ export default function Page() {
                       <p className="text-xs text-muted-foreground">{member.userId?.email ?? "-"}</p>
                     </div>
                     <div className="flex items-center gap-2">
-                      <p className="text-sm capitalize">{member.memberRole}</p>
+                      <select
+                        className="h-8 rounded-md border bg-background px-2 text-xs capitalize"
+                        value={member.memberRole}
+                        disabled={updatingMemberId === member._id || !canEditMember(member)}
+                        onChange={(event) =>
+                          handleMemberRoleChange(
+                            member._id,
+                            event.target.value as TeamRole
+                          )
+                        }
+                      >
+                        <option value="owner">Owner</option>
+                        <option value="admin">Admin</option>
+                        <option value="moderator">Moderator</option>
+                        <option value="member">Member</option>
+                      </select>
                       <select
                         className="h-8 rounded-md border bg-background px-2 text-xs"
                         value={member.status}
-                        disabled={updatingMemberId === member._id}
+                        disabled={updatingMemberId === member._id || !canEditMember(member)}
                         onChange={(event) =>
                           handleMemberStatusChange(
                             member._id,

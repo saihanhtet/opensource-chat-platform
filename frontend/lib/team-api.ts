@@ -17,6 +17,14 @@ export type Team = {
   description?: string
   createdBy: string
   teamType?: "personal" | "group"
+  rolePermissions?: {
+    statusManagement?: {
+      owner?: Array<"owner" | "admin" | "moderator" | "member">
+      admin?: Array<"owner" | "admin" | "moderator" | "member">
+      moderator?: Array<"owner" | "admin" | "moderator" | "member">
+      member?: Array<"owner" | "admin" | "moderator" | "member">
+    }
+  }
 }
 
 export type TeamMemberUser = {
@@ -33,7 +41,7 @@ export type TeamMember = {
   _id: string
   teamId: string
   userId: TeamMemberUser
-  memberRole: "owner" | "admin" | "member"
+  memberRole: "owner" | "admin" | "moderator" | "member"
   status: "pending" | "active" | "removed"
   joinedAt: string
 }
@@ -92,7 +100,11 @@ export async function createTeam(input: {
 
 export async function updateTeam(
   teamId: string,
-  input: { teamName?: string; description?: string }
+  input: {
+    teamName?: string
+    description?: string
+    rolePermissions?: Team["rolePermissions"]
+  }
 ): Promise<Team> {
   const res = await fetch(apiUrl(`/api/teams/${teamId}`), {
     method: "PUT",
@@ -106,12 +118,34 @@ export async function updateTeam(
 export async function updateTeamMember(
   memberId: string,
   input: {
-    memberRole?: "owner" | "admin" | "member"
+    memberRole?: "owner" | "admin" | "moderator" | "member"
     status?: "pending" | "active" | "removed"
   }
 ): Promise<TeamMember> {
   const res = await fetch(apiUrl(`/api/team-members/${memberId}`), {
     method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    credentials: "include",
+    body: JSON.stringify(input),
+  })
+  return parseJson<TeamMember>(res)
+}
+
+export async function getTeamById(teamId: string): Promise<Team> {
+  const res = await fetch(apiUrl(`/api/teams/${teamId}`), {
+    credentials: "include",
+    cache: "no-store",
+  })
+  return parseJson<Team>(res)
+}
+
+export async function addTeamMemberByIdentifier(input: {
+  teamId: string
+  identifier: string
+  memberRole?: "owner" | "admin" | "moderator" | "member"
+}): Promise<TeamMember> {
+  const res = await fetch(apiUrl("/api/team-members"), {
+    method: "POST",
     headers: { "Content-Type": "application/json" },
     credentials: "include",
     body: JSON.stringify(input),

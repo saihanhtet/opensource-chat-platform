@@ -63,7 +63,7 @@ describe("Auth routes", () => {
         expect(res.headers["set-cookie"]).toBeDefined();
     });
 
-    test("POST /api/auth/sign-up creates a personal team for the user", async () => {
+    test("POST /api/auth/sign-up does not create a personal team by default", async () => {
         const c = uniqueUser();
         const res = await request(app).post("/api/auth/sign-up").send(c);
         expect(res.status).toBe(201);
@@ -72,15 +72,7 @@ describe("Auth routes", () => {
             createdBy: res.body._id,
             teamType: "personal",
         });
-        expect(personalTeam).toBeDefined();
-
-        const membership = await TeamMember.findOne({
-            teamId: personalTeam?._id,
-            userId: res.body._id,
-            status: "active",
-        });
-        expect(membership).toBeDefined();
-        expect(membership?.memberRole).toBe("member");
+        expect(personalTeam).toBeNull();
     });
 
     test("POST /api/auth/sign-up returns 409 for duplicate email", async () => {
@@ -409,6 +401,85 @@ describe("Team member routes", () => {
         expect(res.body[0].userId._id).toBe(joiner.userId);
         expect(res.body[0].userId.username).toBeDefined();
         expect(res.body[0].userId.email).toBeDefined();
+    });
+
+    test("owner can add member by username identifier", async () => {
+        const joiner = await signUp(app, uniqueUser());
+        const res = await owner.agent.post("/api/team-members").send({
+            teamId,
+            identifier: joiner.username,
+            memberRole: "moderator",
+        });
+        expect(res.status).toBe(201);
+        expect(res.body.userId._id).toBe(joiner.userId);
+        expect(res.body.memberRole).toBe("moderator");
+    });
+
+    test("admin can update member but not owner", async () => {
+        const admin = await signUp(app, uniqueUser());
+        const member = await signUp(app, uniqueUser());
+
+        const adminMember = await owner.agent.post("/api/team-members").send({
+            teamId,
+            userId: admin.userId,
+            memberRole: "admin",
+        });
+        expect(adminMember.status).toBe(201);
+
+        const regularMember = await owner.agent.post("/api/team-members").send({
+            teamId,
+            userId: member.userId,
+            memberRole: "member",
+        });
+        expect(regularMember.status).toBe(201);
+
+        const adminUpdateMember = await admin.agent
+            .put(`/api/team-members/${regularMember.body._id}`)
+            .send({ status: "removed" });
+        expect(adminUpdateMember.status).toBe(200);
+
+        const ownerRecord = await TeamMember.create({
+            teamId,
+            userId: owner.userId,
+            memberRole: "owner",
+            status: "active",
+        });
+        const adminUpdateOwner = await admin.agent
+            .put(`/api/team-members/${ownerRecord._id}`)
+            .send({ status: "removed" });
+        expect(adminUpdateOwner.status).toBe(403);
+    });
+
+    test("moderator cannot update same-level or higher roles", async () => {
+        const moderator = await signUp(app, uniqueUser());
+        const member = await signUp(app, uniqueUser());
+        const otherModerator = await signUp(app, uniqueUser());
+
+        await owner.agent.post("/api/team-members").send({
+            teamId,
+            userId: moderator.userId,
+            memberRole: "moderator",
+        });
+        const memberRecord = await owner.agent.post("/api/team-members").send({
+            teamId,
+            userId: member.userId,
+            memberRole: "member",
+        });
+        const otherModeratorRecord = await owner.agent.post("/api/team-members").send({
+            teamId,
+            userId: otherModerator.userId,
+            memberRole: "moderator",
+        });
+
+        const canUpdateMember = await moderator.agent
+            .put(`/api/team-members/${memberRecord.body._id}`)
+            .send({ status: "removed" });
+        expect(canUpdateMember.status).toBe(200);
+
+        const cannotUpdateModerator = await moderator.agent
+            .put(`/api/team-members/${otherModeratorRecord.body._id}`)
+            .send({ status: "removed" });
+        expect(cannotUpdateModerator.status).toBe(403);
     });
 
     test("member can remove themselves", async () => {

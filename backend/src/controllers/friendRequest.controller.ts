@@ -53,7 +53,10 @@ export const listFriendRequests = async (req: Request, res: Response) => {
         const me = req.user._id;
         const requests = await FriendRequest.find({
             $or: [{ senderId: me }, { receiverId: me }],
-        }).sort({ createdAt: -1 });
+        })
+            .populate("senderId", "_id username email profilePic status lastSeenAt updatedAt")
+            .populate("receiverId", "_id username email profilePic status lastSeenAt updatedAt")
+            .sort({ createdAt: -1 });
         return res.status(200).json(requests);
     } catch (error) {
         return sendServerError(res, "listFriendRequests", error);

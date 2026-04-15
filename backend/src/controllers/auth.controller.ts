@@ -18,8 +18,6 @@ import {
     sendServerError,
     sendValidationError
 } from "../lib/utils";
-import Team from "../models/team.model.ts";
-import TeamMember from "../models/teamMember.model.ts";
 import User, {type UserDocument} from "../models/user.model";
 import {
     sendPasswordResetMail,
@@ -97,18 +95,6 @@ export const signUp = async (req: Request, res: Response) => {
             password: hashedPassword,
         });
         const savedUser = await user.save();
-        const personalTeam = await Team.create({
-            teamName: `${savedUser.username}'s Personal Team`,
-            description: "Private personal team",
-            teamType: "personal",
-            createdBy: savedUser._id,
-        });
-        await TeamMember.create({
-            teamId: personalTeam._id,
-            userId: savedUser._id,
-            memberRole: "member",
-            status: "active",
-        });
         const response = sendAuthResponse(res, savedUser, 201);
         if (process.env.NODE_ENV !== "test") {
             await sendWelcomeEmail(savedUser);
