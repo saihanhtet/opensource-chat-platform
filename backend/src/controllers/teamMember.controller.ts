@@ -15,6 +15,7 @@ import {
     createTeamMemberSchema,
     updateTeamMemberSchema,
 } from "../schemas/teamMember.schema.ts";
+import { emitToTeam, emitToUser, SOCKET_EVENTS } from "../socket/realtime.ts";
 
 type TeamRole = "owner" | "admin" | "moderator" | "member";
 
@@ -137,6 +138,18 @@ export const createTeamMember = async (req: Request, res: Response) => {
         });
         const populated = await TeamMember.findById(member._id)
             .populate("userId", "_id username email profilePic status lastSeenAt updatedAt");
+        if (populated) {
+            const payload = {
+                ...populated.toObject(),
+                _meta: {
+                    fromUserId: String(req.user._id),
+                    fromUsername: req.user.username,
+                    spaceName: team.teamName,
+                },
+            };
+            emitToTeam(String(populated.teamId), SOCKET_EVENTS.teamMemberCreated, payload);
+            emitToUser(String(populated.userId?._id ?? userObjectId), SOCKET_EVENTS.teamMemberCreated, payload);
+        }
         return res.status(201).json(populated);
     } catch (error) {
         if (isDuplicateKeyError(error)) {
@@ -222,6 +235,18 @@ export const updateTeamMember = async (req: Request, res: Response) => {
         await member.save();
         const populated = await TeamMember.findById(member._id)
             .populate("userId", "_id username email profilePic status lastSeenAt updatedAt");
+        if (populated) {
+            const payload = {
+                ...populated.toObject(),
+                _meta: {
+                    fromUserId: String(req.user._id),
+                    fromUsername: req.user.username,
+                    spaceName: team.teamName,
+                },
+            };
+            emitToTeam(String(populated.teamId), SOCKET_EVENTS.teamMemberUpdated, payload);
+            emitToUser(String(populated.userId?._id ?? member.userId), SOCKET_EVENTS.teamMemberUpdated, payload);
+        }
         return res.status(200).json(populated);
     } catch (error) {
         return sendServerError(res, "updateTeamMember", error);
@@ -252,7 +277,11 @@ export const deleteTeamMember = async (req: Request, res: Response) => {
             return res.status(403).json({ message: "Forbidden" });
         }
 
+        const teamId = String(member.teamId);
+        const userId = String(member.userId);
         await TeamMember.findByIdAndDelete(id);
+        emitToTeam(teamId, SOCKET_EVENTS.teamMemberRemoved, { _id: id, teamId, userId });
+        emitToUser(userId, SOCKET_EVENTS.teamMemberRemoved, { _id: id, teamId, userId });
         return res.status(200).json({ message: "Team member removed" });
     } catch (error) {
         return sendServerError(res, "deleteTeamMember", error);

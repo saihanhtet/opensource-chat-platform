@@ -6,14 +6,18 @@ import {
     expect,
     test,
 } from "bun:test";
+import { createServer } from "http";
 import { MongoMemoryServer } from "mongodb-memory-server";
 import mongoose from "mongoose";
+import { io as socketClient } from "socket.io-client";
 import request from "supertest";
 
 import { createApp } from "../src/app.ts";
 import Team from "../src/models/team.model.ts";
 import TeamMember from "../src/models/teamMember.model.ts";
 import User from "../src/models/user.model.ts";
+import { initSocketServer } from "../src/socket/server.ts";
+import { SOCKET_EVENTS } from "../src/socket/events.ts";
 import {
     clearDatabase,
     signUp,
@@ -804,5 +808,62 @@ describe("Cross-route flow", () => {
             fileUrl: "https://cdn.example/notes.md",
         });
         expect(file.status).toBe(201);
+    });
+});
+
+describe("Socket realtime", () => {
+    test("receiver gets friend request event in realtime", async () => {
+        const realtimeApp = createApp();
+        const server = createServer(realtimeApp);
+        initSocketServer(server);
+        await new Promise<void>((resolve) => server.listen(0, resolve));
+        const address = server.address();
+        const port = typeof address === "object" && address ? address.port : 0;
+        const baseUrl = `http://127.0.0.1:${port}`;
+
+        try {
+            const receiverSignup = await request(server).post("/api/auth/sign-up").send(uniqueUser());
+            expect(receiverSignup.status).toBe(201);
+            const receiverCookie = receiverSignup.headers["set-cookie"] as string[] | undefined;
+            expect(receiverCookie?.length).toBeGreaterThan(0);
+
+            const senderSignup = await request(server).post("/api/auth/sign-up").send(uniqueUser());
+            expect(senderSignup.status).toBe(201);
+            const senderCookie = senderSignup.headers["set-cookie"] as string[] | undefined;
+            expect(senderCookie?.length).toBeGreaterThan(0);
+
+            const socket = socketClient(baseUrl, {
+                withCredentials: true,
+                extraHeaders: {
+                    cookie: (receiverCookie ?? []).join("; "),
+                },
+                transports: ["websocket"],
+            });
+
+            await new Promise<void>((resolve, reject) => {
+                socket.once("connect", () => resolve());
+                socket.once("connect_error", (error) => reject(error));
+            });
+
+            const realtimeEvent = new Promise<unknown>((resolve) => {
+                socket.once(SOCKET_EVENTS.friendRequestCreated, resolve);
+            });
+
+            const createRequest = await request(server)
+                .post("/api/friend-requests")
+                .set("Cookie", (senderCookie ?? []).join("; "))
+                .send({ receiverId: receiverSignup.body._id });
+            expect(createRequest.status).toBe(201);
+
+            const payload = await Promise.race([
+                realtimeEvent,
+                new Promise((_, reject) => setTimeout(() => reject(new Error("Socket event timeout")), 3000)),
+            ]);
+            expect(payload).toBeDefined();
+
+            socket.disconnect();
+        } finally {
+            await new Promise<void>((resolve) => server.close(() => resolve()));
+        }
     });
 });

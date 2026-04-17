@@ -8,6 +8,7 @@ import {
     createConversationSchema,
     updateConversationSchema,
 } from "../schemas/conversation.schema.ts";
+import { emitToConversation, SOCKET_EVENTS } from "../socket/realtime.ts";
 
 const badId = (res: Response) =>
     res.status(400).json({ message: "Invalid id" });
@@ -45,6 +46,7 @@ export const createConversation = async (req: Request, res: Response) => {
             participantIds: participantObjectIds,
             lastMessage: parsed.data.lastMessage ?? "",
         });
+        emitToConversation(String(doc._id), SOCKET_EVENTS.conversationUpdated, doc);
         return res.status(201).json(doc);
     } catch (error) {
         return sendServerError(res, "createConversation", error);
@@ -124,6 +126,7 @@ export const updateConversation = async (req: Request, res: Response) => {
             conversation.lastMessage = parsed.data.lastMessage;
         }
         await conversation.save();
+        emitToConversation(String(conversation._id), SOCKET_EVENTS.conversationUpdated, conversation);
         return res.status(200).json(conversation);
     } catch (error) {
         return sendServerError(res, "updateConversation", error);
@@ -146,6 +149,10 @@ export const deleteConversation = async (req: Request, res: Response) => {
         }
 
         await Conversation.findByIdAndDelete(id);
+        emitToConversation(String(id), SOCKET_EVENTS.conversationUpdated, {
+            _id: String(id),
+            deleted: true,
+        });
         return res.status(200).json({ message: "Conversation deleted" });
     } catch (error) {
         return sendServerError(res, "deleteConversation", error);
@@ -209,6 +216,7 @@ export const getTypingStatus = async (req: Request, res: Response) => {
         }
         if (conversationMap.size === 0) {
             typingState.delete(id);
+            emitToConversation(id, SOCKET_EVENTS.typingUpdated, { conversationId: id, users: [] });
             return res.status(200).json({ users: [] });
         }
         typingState.set(id, conversationMap);
@@ -218,9 +226,17 @@ export const getTypingStatus = async (req: Request, res: Response) => {
         if (otherUserIds.length === 0) return res.status(200).json({ users: [] });
 
         const users = await User.find({ _id: { $in: otherUserIds } }).select("_id username");
-        return res.status(200).json({
+        const payload = {
+            conversationId: id,
             users: users.map((user) => ({
-                _id: String(user._id),
+                userId: String(user._id),
+                username: user.username,
+            })),
+        };
+        emitToConversation(id, SOCKET_EVENTS.typingUpdated, payload);
+        return res.status(200).json({
+            users: payload.users.map((user) => ({
+                _id: user.userId,
                 username: user.username,
             })),
         });

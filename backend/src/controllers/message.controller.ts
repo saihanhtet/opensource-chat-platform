@@ -4,7 +4,9 @@ import mongoose from "mongoose";
 import { reqParamId, sendServerError, sendValidationError } from "../lib/utils.ts";
 import Conversation from "../models/conversation.model.ts";
 import Message from "../models/message.model.ts";
+import Team from "../models/team.model.ts";
 import { createMessageSchema, updateMessageSchema } from "../schemas/message.schema.ts";
+import { emitToConversation, emitToUser, SOCKET_EVENTS } from "../socket/realtime.ts";
 
 const badId = (res: Response) =>
     res.status(400).json({ message: "Invalid id" });
@@ -16,6 +18,28 @@ const userInConversation = async (
     const conv = await Conversation.findById(conversationId);
     if (!conv) return false;
     return conv.participantIds.some((p) => p.equals(userId));
+};
+
+const emitToConversationParticipants = async (
+    conversationId: mongoose.Types.ObjectId,
+    event: string,
+    payload: unknown
+) => {
+    const conversation = await Conversation.findById(conversationId).select("participantIds");
+    if (!conversation) return;
+    for (const participantId of conversation.participantIds) {
+        emitToUser(String(participantId), event, payload);
+    }
+};
+
+const getSpaceLabel = async (conversationId: mongoose.Types.ObjectId) => {
+    const conversation = await Conversation.findById(conversationId).select("type teamId");
+    if (!conversation) return "Personal";
+    if (conversation.type === "team" && conversation.teamId) {
+        const team = await Team.findById(conversation.teamId).select("teamName");
+        return team?.teamName ?? "Team";
+    }
+    return "Personal";
 };
 
 export const createMessage = async (req: Request, res: Response) => {
@@ -42,10 +66,28 @@ export const createMessage = async (req: Request, res: Response) => {
             content,
             fileUrl,
         });
+        const messagePayload = {
+            ...message.toObject(),
+            _meta: {
+                fromUserId: String(me),
+                fromUsername: req.user.username,
+                spaceName: await getSpaceLabel(conversationId),
+            },
+        };
 
-        await Conversation.findByIdAndUpdate(conversationId, {
+        const updatedConversation = await Conversation.findByIdAndUpdate(conversationId, {
             lastMessage: preview,
-        });
+        }, { new: true });
+        emitToConversation(String(conversationId), SOCKET_EVENTS.messageNew, messagePayload);
+        await emitToConversationParticipants(conversationId, SOCKET_EVENTS.messageNew, messagePayload);
+        if (updatedConversation) {
+            emitToConversation(String(conversationId), SOCKET_EVENTS.conversationUpdated, updatedConversation);
+            await emitToConversationParticipants(
+                conversationId,
+                SOCKET_EVENTS.conversationUpdated,
+                updatedConversation
+            );
+        }
 
         return res.status(201).json(message);
     } catch (error) {
@@ -129,6 +171,12 @@ export const updateMessage = async (req: Request, res: Response) => {
         if (parsed.data.content !== undefined) message.content = parsed.data.content;
         if (parsed.data.fileUrl !== undefined) message.fileUrl = parsed.data.fileUrl;
         await message.save();
+        emitToConversation(String(message.conversationId), SOCKET_EVENTS.messageUpdated, message);
+        await emitToConversationParticipants(
+            message.conversationId as mongoose.Types.ObjectId,
+            SOCKET_EVENTS.messageUpdated,
+            message
+        );
         return res.status(200).json(message);
     } catch (error) {
         return sendServerError(res, "updateMessage", error);
@@ -149,7 +197,14 @@ export const deleteMessage = async (req: Request, res: Response) => {
             return res.status(403).json({ message: "Forbidden" });
         }
 
+        const conversationId = String(message.conversationId);
         await Message.findByIdAndDelete(id);
+        emitToConversation(conversationId, SOCKET_EVENTS.messageDeleted, { _id: id, conversationId });
+        await emitToConversationParticipants(
+            message.conversationId as mongoose.Types.ObjectId,
+            SOCKET_EVENTS.messageDeleted,
+            { _id: id, conversationId }
+        );
         return res.status(200).json({ message: "Message deleted" });
     } catch (error) {
         return sendServerError(res, "deleteMessage", error);

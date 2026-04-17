@@ -16,6 +16,10 @@ const nextConfig: NextConfig = {
         source: "/api/:path*",
         destination: `${backendProxyTarget.replace(/\/$/, "")}/api/:path*`,
       },
+      {
+        source: "/socket.io/:path*",
+        destination: `${backendProxyTarget.replace(/\/$/, "")}/socket.io/:path*`,
+      },
     ];
   },
 };

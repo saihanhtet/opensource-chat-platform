@@ -12,6 +12,7 @@ import {
     createFriendRequestSchema,
     updateFriendRequestSchema,
 } from "../schemas/friendRequest.schema.ts";
+import { emitToUser, SOCKET_EVENTS } from "../socket/realtime.ts";
 
 const badId = (res: Response) =>
     res.status(400).json({ message: "Invalid id" });
@@ -35,6 +36,16 @@ export const createFriendRequest = async (req: Request, res: Response) => {
             receiverId,
             status: "pending",
         });
+        const payload = {
+            ...doc.toObject(),
+            _meta: {
+                fromUserId: String(me),
+                fromUsername: req.user.username,
+                spaceName: "Personal",
+            },
+        };
+        emitToUser(String(me), SOCKET_EVENTS.friendRequestCreated, payload);
+        emitToUser(String(receiverId), SOCKET_EVENTS.friendRequestCreated, payload);
         return res.status(201).json(doc);
     } catch (error) {
         if (isDuplicateKeyError(error)) {
@@ -107,6 +118,16 @@ export const updateFriendRequest = async (req: Request, res: Response) => {
 
         doc.status = parsed.data.status;
         await doc.save();
+        const payload = {
+            ...doc.toObject(),
+            _meta: {
+                fromUserId: String(req.user._id),
+                fromUsername: req.user.username,
+                spaceName: "Personal",
+            },
+        };
+        emitToUser(String(doc.senderId), SOCKET_EVENTS.friendRequestUpdated, payload);
+        emitToUser(String(doc.receiverId), SOCKET_EVENTS.friendRequestUpdated, payload);
         return res.status(200).json(doc);
     } catch (error) {
         return sendServerError(res, "updateFriendRequest", error);
@@ -128,7 +149,11 @@ export const deleteFriendRequest = async (req: Request, res: Response) => {
             return res.status(403).json({ message: "Forbidden" });
         }
 
+        const senderId = String(doc.senderId);
+        const receiverId = String(doc.receiverId);
         await FriendRequest.findByIdAndDelete(id);
+        emitToUser(senderId, SOCKET_EVENTS.friendRequestDeleted, { _id: id });
+        emitToUser(receiverId, SOCKET_EVENTS.friendRequestDeleted, { _id: id });
         return res.status(200).json({ message: "Friend request deleted" });
     } catch (error) {
         return sendServerError(res, "deleteFriendRequest", error);

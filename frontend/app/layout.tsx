@@ -3,6 +3,9 @@ import { Geist, Geist_Mono, Inter, DM_Sans } from "next/font/google";
 import "./globals.css";
 import { cn } from "@/lib/utils";
 import { TooltipProvider } from "@/components/ui/tooltip"
+import { SocketProvider } from "@/components/providers/socket-provider";
+import { RealtimeNotifier } from "@/components/providers/realtime-notifier";
+import { Toaster } from "sonner";
 
 const dmSansHeading = DM_Sans({subsets:['latin'],variable:'--font-heading'});
 
@@ -34,7 +37,13 @@ export default function RootLayout({
       className={cn("h-full", "antialiased", geistSans.variable, geistMono.variable, "font-sans", inter.variable, dmSansHeading.variable)}
     >
       <body className="min-h-full flex flex-col">
-        <TooltipProvider>{children}</TooltipProvider>
+        <TooltipProvider>
+          <SocketProvider>
+            <RealtimeNotifier />
+            <Toaster richColors position="top-right" />
+            {children}
+          </SocketProvider>
+        </TooltipProvider>
       </body>
     </html>
   );

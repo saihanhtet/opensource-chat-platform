@@ -28,6 +28,8 @@ import {
   updateTeam,
   updateTeamMember,
 } from "@/lib/team-api"
+import { usePresenceRealtime } from "@/lib/use-presence-realtime"
+import { useTeamRealtime } from "@/lib/use-team-realtime"
 
 type TeamRole = "owner" | "admin" | "moderator" | "member"
 const teamRoles: TeamRole[] = ["owner", "admin", "moderator", "member"]
@@ -91,6 +93,18 @@ export default function Page() {
     })
   }, [members, search])
   const canEditTeam = Boolean(selectedTeamId)
+
+  const refreshSelectedTeam = React.useCallback(async () => {
+    if (!selectedTeamId) return
+    const [team, teamMembers] = await Promise.all([
+      getTeamById(selectedTeamId),
+      getTeamMembers(selectedTeamId),
+    ])
+    setSelectedTeam(team)
+    setSelectedTeamName(team.teamName)
+    setTeamNameDraft(team.teamName)
+    setMembers(teamMembers)
+  }, [selectedTeamId])
 
   React.useEffect(() => {
     if (!selectedTeamId) {
@@ -245,6 +259,30 @@ export default function Page() {
       setSavingPermissions(false)
     }
   }
+
+  useTeamRealtime({
+    teamId: selectedTeamId,
+    onChange: () => {
+      void refreshSelectedTeam()
+    },
+  })
+
+  usePresenceRealtime((payload) => {
+    setMembers((prev) =>
+      prev.map((member) =>
+        member.userId?._id === payload.userId
+          ? {
+              ...member,
+              userId: {
+                ...member.userId,
+                status: payload.status,
+                lastSeenAt: payload.lastSeenAt,
+              },
+            }
+          : member
+      )
+    )
+  })
 
   return (
     <SidebarProvider>

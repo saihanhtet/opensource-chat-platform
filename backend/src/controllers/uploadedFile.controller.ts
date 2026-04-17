@@ -11,6 +11,8 @@ import {
     createUploadedFileSchema,
     updateUploadedFileSchema,
 } from "../schemas/uploadedFile.schema.ts";
+import { emitToConversation, emitToUser, SOCKET_EVENTS } from "../socket/realtime.ts";
+import Team from "../models/team.model.ts";
 
 const badId = (res: Response) =>
     res.status(400).json({ message: "Invalid id" });
@@ -22,6 +24,28 @@ const userInConversation = async (
     const conv = await Conversation.findById(conversationId);
     if (!conv) return false;
     return conv.participantIds.some((p) => p.equals(userId));
+};
+
+const emitToConversationParticipants = async (
+    conversationId: mongoose.Types.ObjectId,
+    event: string,
+    payload: unknown
+) => {
+    const conversation = await Conversation.findById(conversationId).select("participantIds");
+    if (!conversation) return;
+    for (const participantId of conversation.participantIds) {
+        emitToUser(String(participantId), event, payload);
+    }
+};
+
+const getSpaceLabel = async (conversationId: mongoose.Types.ObjectId) => {
+    const conversation = await Conversation.findById(conversationId).select("type teamId");
+    if (!conversation) return "Personal";
+    if (conversation.type === "team" && conversation.teamId) {
+        const team = await Team.findById(conversation.teamId).select("teamName");
+        return team?.teamName ?? "Team";
+    }
+    return "Personal";
 };
 
 export const createUploadedFile = async (req: Request, res: Response) => {
@@ -93,11 +117,29 @@ export const uploadChatFile = async (req: Request, res: Response) => {
             content: (content ?? "").trim(),
             fileUrl: uploaded.secure_url,
         });
+        const messagePayload = {
+            ...message.toObject(),
+            _meta: {
+                fromUserId: String(me),
+                fromUsername: req.user.username,
+                spaceName: await getSpaceLabel(conversationObjectId),
+            },
+        };
 
         const preview = message.content.slice(0, 500) || uploaded.secure_url.slice(0, 500);
-        await Conversation.findByIdAndUpdate(conversationObjectId, {
+        const updatedConversation = await Conversation.findByIdAndUpdate(conversationObjectId, {
             lastMessage: preview,
-        });
+        }, { new: true });
+        emitToConversation(String(conversationObjectId), SOCKET_EVENTS.messageNew, messagePayload);
+        await emitToConversationParticipants(conversationObjectId, SOCKET_EVENTS.messageNew, messagePayload);
+        if (updatedConversation) {
+            emitToConversation(String(conversationObjectId), SOCKET_EVENTS.conversationUpdated, updatedConversation);
+            await emitToConversationParticipants(
+                conversationObjectId,
+                SOCKET_EVENTS.conversationUpdated,
+                updatedConversation
+            );
+        }
 
         return res.status(201).json({
             file: fileDoc,

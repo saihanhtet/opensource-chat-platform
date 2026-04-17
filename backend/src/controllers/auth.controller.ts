@@ -24,6 +24,7 @@ import {
     sendWelcomeMail,
     type sendWelcomeProps,
 } from "../emails/handlers";
+import { emitGlobal, emitToUser, SOCKET_EVENTS } from "../socket/realtime.ts";
 
 type SignUpInput = z.infer<typeof signUpSchema>;
 type SignInInput = z.infer<typeof SignInSchema>;
@@ -95,6 +96,14 @@ export const signUp = async (req: Request, res: Response) => {
             password: hashedPassword,
         });
         const savedUser = await user.save();
+        savedUser.status = "active";
+        savedUser.lastSeenAt = new Date();
+        await savedUser.save();
+        emitGlobal(SOCKET_EVENTS.presenceUpdated, {
+            userId: String(savedUser._id),
+            status: "active",
+            lastSeenAt: savedUser.lastSeenAt?.toISOString?.() ?? new Date().toISOString(),
+        });
         const response = sendAuthResponse(res, savedUser, 201);
         if (process.env.NODE_ENV !== "test") {
             await sendWelcomeEmail(savedUser);
@@ -129,6 +138,14 @@ export const signIn = async (req: Request, res: Response) => {
             });
         }
 
+        user.status = "active";
+        user.lastSeenAt = new Date();
+        await user.save();
+        emitToUser(String(user._id), SOCKET_EVENTS.presenceUpdated, {
+            userId: String(user._id),
+            status: "active",
+            lastSeenAt: user.lastSeenAt?.toISOString?.() ?? new Date().toISOString(),
+        });
         return sendAuthResponse(res, user, 200);
     } catch (error) {
         return sendServerError(res, "Login controller", error);
@@ -144,6 +161,11 @@ export const signOut = async (_req: Request, res: Response) => {
                 await User.findByIdAndUpdate(decoded.userId, {
                     status: "offline",
                     lastSeenAt: new Date(),
+                });
+                emitToUser(decoded.userId, SOCKET_EVENTS.presenceUpdated, {
+                    userId: decoded.userId,
+                    status: "offline",
+                    lastSeenAt: new Date().toISOString(),
                 });
             }
         }

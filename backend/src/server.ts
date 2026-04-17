@@ -1,8 +1,10 @@
 import dotenv from "dotenv";
+import http from "http";
 import path from "path";
 
 import { createApp } from "./app.ts";
 import { connectDatabase } from "./lib/database.ts";
+import { initSocketServer } from "./socket/server.ts";
 
 dotenv.config();
 
@@ -10,6 +12,7 @@ const frontendDir = path.join(import.meta.dir, "../../frontend");
 
 async function bootstrap() {
   const app = createApp();
+  const httpServer = http.createServer(app);
   const port = Number(process.env.PORT) || 3000;
   const env = process.env.NODE_ENV || "development";
 
@@ -31,9 +34,11 @@ async function bootstrap() {
     });
   }
 
-  app.listen(port, () => {
+  await connectDatabase();
+  initSocketServer(httpServer);
+  httpServer.listen(port, () => {
     console.log(`Server is listening on port ${port}`);
-    void connectDatabase().then(() => console.log("Server can talk now"));
+    console.log("Server can talk now");
   });
 }
 

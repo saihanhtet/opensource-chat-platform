@@ -13,6 +13,7 @@ interface User {
   profilePic: string
   status?: string
   lastSeenAt?: string
+  unreadCount?: number
 }
 
 export function NavMain({
@@ -56,6 +57,11 @@ export function NavMain({
                     {presenceLabel(user.status, user.lastSeenAt)}
                   </span>
                 </div>
+                {user.unreadCount && user.unreadCount > 0 ? (
+                  <span className="rounded-full bg-primary px-2 py-0.5 text-[10px] font-semibold text-primary-foreground">
+                    {user.unreadCount} new
+                  </span>
+                ) : null}
                 <span
                   className={`size-2 rounded-full ${user.isActive ? "bg-emerald-500" : "bg-gray-400"}`}
                 />

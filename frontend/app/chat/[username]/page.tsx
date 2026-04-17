@@ -7,6 +7,9 @@ import { SidebarTrigger } from "@/components/ui/sidebar"
 import * as chatApi from "@/lib/chat-api"
 import { rewriteToFormal } from "@/lib/gemini-api"
 import { presenceLabel } from "@/lib/presence"
+import { useChatRealtime } from "@/lib/use-chat-realtime"
+import { usePresenceRealtime } from "@/lib/use-presence-realtime"
+import { useSocket } from "@/lib/use-socket"
 import {
   RiAttachment2,
   RiArrowUpLine,
@@ -58,6 +61,7 @@ export default function ChatPage() {
   const [error, setError] = React.useState<string>()
   const listRef = React.useRef<HTMLDivElement>(null)
   const fileInputRef = React.useRef<HTMLInputElement>(null)
+  const socket = useSocket()
   const syncMessages = React.useCallback(
     async (id: string) => {
       const latest = await chatApi.getConversationMessages(id)
@@ -106,13 +110,57 @@ export default function ChatPage() {
     }
   }, [syncMessages, username])
 
+  const { setTyping } = useChatRealtime({
+    conversationId,
+    onMessageNew: (payload) => {
+      const message = payload as chatApi.ChatMessage
+      if (String(message.conversationId) !== String(conversationId)) return
+      setMessages((prev) =>
+        prev.some((existing) => existing._id === message._id) ? prev : [...prev, message]
+      )
+      if (message.fileUrl) {
+        void chatApi.getConversationFiles(String(message.conversationId)).then((files) => {
+          setFilesByUrl(Object.fromEntries(files.map((file) => [file.fileUrl, file])))
+        })
+      }
+    },
+    onMessageUpdated: (payload) => {
+      const message = payload as chatApi.ChatMessage
+      setMessages((prev) => prev.map((item) => (item._id === message._id ? message : item)))
+    },
+    onMessageDeleted: (payload) => {
+      const data = payload as { _id: string }
+      setMessages((prev) => prev.filter((item) => item._id !== data._id))
+    },
+    onTypingUpdated: (payload) => {
+      const data = payload as { users: Array<{ userId: string; username: string }> }
+      setTypingUsers(
+        data.users
+          .filter((user) => user.userId !== myUserId)
+          .map((user) => user.username)
+      )
+    },
+  })
+
+  usePresenceRealtime((payload) => {
+    if (!conversationId || payload.userId === myUserId) return
+    void chatApi.getUserByUsername(username).then((peer) => {
+      setPeerStatus(peer.status)
+      setPeerLastSeenAt(peer.lastSeenAt ?? peer.updatedAt)
+    })
+  })
+
   React.useEffect(() => {
     if (!conversationId) return
-    const interval = window.setInterval(() => {
+    const hasText = draft.trim().length > 0
+    setTyping(hasText)
+    return () => setTyping(false)
+  }, [conversationId, draft, setTyping])
+
+  React.useEffect(() => {
+    if (!socket || !conversationId) return
+    const handleReconnect = () => {
       void syncMessages(conversationId)
-      void chatApi.getTypingStatus(conversationId).then((users) => {
-        setTypingUsers(users.map((user) => user.username))
-      })
       void chatApi.getConversationFiles(conversationId).then((files) => {
         setFilesByUrl(Object.fromEntries(files.map((file) => [file.fileUrl, file])))
       })
@@ -120,20 +168,12 @@ export default function ChatPage() {
         setPeerStatus(peer.status)
         setPeerLastSeenAt(peer.lastSeenAt ?? peer.updatedAt)
       })
-    }, 1500)
-    return () => {
-      window.clearInterval(interval)
     }
-  }, [conversationId, syncMessages, username])
-
-  React.useEffect(() => {
-    if (!conversationId) return
-    const hasText = draft.trim().length > 0
-    void chatApi.setTypingStatus({ conversationId, isTyping: hasText })
+    socket.on("connect", handleReconnect)
     return () => {
-      void chatApi.setTypingStatus({ conversationId, isTyping: false })
+      socket.off("connect", handleReconnect)
     }
-  }, [conversationId, draft])
+  }, [conversationId, socket, syncMessages, username])
 
   React.useEffect(() => {
     listRef.current?.scrollTo({
@@ -165,8 +205,7 @@ export default function ChatPage() {
       )
       setDraft("")
       setSelectedFile(null)
-      await chatApi.setTypingStatus({ conversationId, isTyping: false })
-      await syncMessages(conversationId)
+      setTyping(false)
     } catch (sendError) {
       setError(sendError instanceof Error ? sendError.message : "Failed to send message")
     } finally {

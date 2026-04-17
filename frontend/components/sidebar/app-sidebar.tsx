@@ -1,5 +1,6 @@
 "use client"
 
+import { usePathname } from "next/navigation"
 import * as React from "react"
 
 import { NavMain } from "@/components/sidebar/nav-main"
@@ -8,30 +9,16 @@ import { TeamSwitcher } from "@/components/sidebar/team-switcher"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import {
-  Sheet,
-  SheetContent,
-  SheetDescription,
-  SheetFooter,
-  SheetHeader,
-  SheetTitle,
-} from "@/components/ui/sheet"
-import { Textarea } from "@/components/ui/textarea"
-import {
-  createFriendRequestByUsername,
-  listFriendRequests,
-  type FriendRequestUser,
-  updateFriendRequestStatus,
-} from "@/lib/friend-api"
-import {
-  createTeam,
-  getCurrentUser,
-  getTeamMembers,
-  getTeams,
-  type Team,
-  type TeamMember,
-} from "@/lib/team-api"
+import * as sheet from "@/components/ui/sheet"
 import * as sidebar from "@/components/ui/sidebar"
+import { Textarea } from "@/components/ui/textarea"
+import * as friendApi from "@/lib/friend-api"
+import { SOCKET_EVENTS } from "@/lib/socket-events"
+import * as teamApi from "@/lib/team-api"
+import { useFriendRealtime } from "@/lib/use-friend-realtime"
+import { usePresenceRealtime } from "@/lib/use-presence-realtime"
+import { useSocket } from "@/lib/use-socket"
+import { useTeamRealtime } from "@/lib/use-team-realtime"
 import * as remixicon from "@remixicon/react"
 
 const SELECTED_TEAM_KEY = "selected-team-id"
@@ -48,10 +35,10 @@ function teamLogo(index: number) {
 type SidebarTeamData = {
   selectedTeamId?: string
   selectedTeamName?: string
-  selectedTeam?: Team
+  selectedTeam?: teamApi.Team
   currentUserId?: string
   currentUserRole?: "owner" | "admin" | "moderator" | "member"
-  members: TeamMember[]
+  members: teamApi.TeamMember[]
   loading: boolean
   error?: string
 }
@@ -61,6 +48,8 @@ type AppSidebarProps = React.ComponentProps<typeof sidebar.Sidebar> & {
 }
 
 export function AppSidebar({ onTeamDataChange, ...props }: AppSidebarProps) {
+  const pathname = usePathname()
+  const socket = useSocket()
   const [theme, setTheme] = React.useState<"light" | "dark">("light")
   const [loading, setLoading] = React.useState(true)
   const [error, setError] = React.useState<string>()
@@ -71,22 +60,23 @@ export function AppSidebar({ onTeamDataChange, ...props }: AppSidebarProps) {
     avatar: "",
   })
   const [teams, setTeams] = React.useState<
-    { id: string; name: string; logo: React.ReactNode; plan: string; team: Team }[]
+    { id: string; name: string; logo: React.ReactNode; plan: string; team: teamApi.Team }[]
   >([])
   const [activeTeamId, setActiveTeamId] = React.useState<string>()
-  const [members, setMembers] = React.useState<TeamMember[]>([])
+  const [members, setMembers] = React.useState<teamApi.TeamMember[]>([])
   const [createTeamOpen, setCreateTeamOpen] = React.useState(false)
   const [creatingTeam, setCreatingTeam] = React.useState(false)
   const [newTeamName, setNewTeamName] = React.useState("")
   const [newTeamDescription, setNewTeamDescription] = React.useState("")
   const [friendUsername, setFriendUsername] = React.useState("")
   const [friendRequests, setFriendRequests] = React.useState<
-    { _id: string; sender: FriendRequestUser }[]
+    { _id: string; sender: friendApi.FriendRequestUser }[]
   >([])
+  const [unreadByUserId, setUnreadByUserId] = React.useState<Record<string, number>>({})
 
   const loadPersonalData = React.useCallback(
     async (meId: string) => {
-      const requests = await listFriendRequests()
+      const requests = await friendApi.listFriendRequests()
       const acceptedUsers = requests
         .filter((request) => request.status === "accepted")
         .map((request) => {
@@ -96,7 +86,7 @@ export function AppSidebar({ onTeamDataChange, ...props }: AppSidebarProps) {
           if (typeof receiver === "object" && receiver._id !== meId) return receiver
           return undefined
         })
-        .filter((value): value is FriendRequestUser => Boolean(value))
+        .filter((value): value is friendApi.FriendRequestUser => Boolean(value))
       const incomingPending = requests
         .filter(
           (request) =>
@@ -105,7 +95,7 @@ export function AppSidebar({ onTeamDataChange, ...props }: AppSidebarProps) {
             request.receiverId._id === meId &&
             typeof request.senderId === "object"
         )
-        .map((request) => ({ _id: request._id, sender: request.senderId as FriendRequestUser }))
+        .map((request) => ({ _id: request._id, sender: request.senderId as friendApi.FriendRequestUser }))
       setFriendRequests(incomingPending)
       setMembers(
         acceptedUsers.map((friend) => ({
@@ -137,6 +127,30 @@ export function AppSidebar({ onTeamDataChange, ...props }: AppSidebarProps) {
     [onTeamDataChange]
   )
 
+  const refreshActiveContext = React.useCallback(async () => {
+    if (!currentUserId) return
+    if (!activeTeamId) {
+      await loadPersonalData(currentUserId)
+      return
+    }
+    const selectedTeam = teams.find((team) => team.id === activeTeamId)
+    const fetchedMembers = await teamApi.getTeamMembers(activeTeamId)
+    setMembers(fetchedMembers)
+    const membership = fetchedMembers.find((member) => member.userId?._id === currentUserId)
+    const currentUserRole = selectedTeam?.team.createdBy === currentUserId
+      ? "owner"
+      : membership?.memberRole
+    onTeamDataChange?.({
+      selectedTeamId: activeTeamId,
+      selectedTeamName: selectedTeam?.name,
+      selectedTeam: selectedTeam?.team,
+      currentUserId,
+      currentUserRole,
+      members: fetchedMembers,
+      loading: false,
+    })
+  }, [activeTeamId, currentUserId, loadPersonalData, onTeamDataChange, teams])
+
   React.useEffect(() => {
     const stored = window.localStorage.getItem("theme")
     const prefersDark = window.matchMedia("(prefers-color-scheme: dark)").matches
@@ -158,8 +172,8 @@ export function AppSidebar({ onTeamDataChange, ...props }: AppSidebarProps) {
       onTeamDataChange?.({ members: [], loading: true })
       try {
         const [currentUser, fetchedTeams] = await Promise.all([
-          getCurrentUser(),
-          getTeams(),
+          teamApi.getCurrentUser(),
+          teamApi.getTeams(),
         ])
 
         if (!mounted) return
@@ -189,7 +203,7 @@ export function AppSidebar({ onTeamDataChange, ...props }: AppSidebarProps) {
 
         if (selectedTeamId) {
           window.localStorage.setItem(SELECTED_TEAM_KEY, selectedTeamId)
-          const fetchedMembers = await getTeamMembers(selectedTeamId)
+          const fetchedMembers = await teamApi.getTeamMembers(selectedTeamId)
           if (!mounted) return
           setMembers(fetchedMembers)
           const membership = fetchedMembers.find((member) => member.userId?._id === currentUser._id)
@@ -237,7 +251,7 @@ export function AppSidebar({ onTeamDataChange, ...props }: AppSidebarProps) {
     setError(undefined)
     onTeamDataChange?.({ selectedTeamId: teamId, members: [], loading: true })
     try {
-      const fetchedMembers = await getTeamMembers(teamId)
+      const fetchedMembers = await teamApi.getTeamMembers(teamId)
       const selectedTeam = teams.find((team) => team.id === teamId)
       const membership = fetchedMembers.find((member) => member.userId?._id === currentUserId)
       const currentUserRole = selectedTeam?.team.createdBy === currentUserId
@@ -285,7 +299,7 @@ export function AppSidebar({ onTeamDataChange, ...props }: AppSidebarProps) {
     }
     setCreatingTeam(true)
     try {
-      const createdTeam = await createTeam({
+      const createdTeam = await teamApi.createTeam({
         teamName: newTeamName.trim(),
         description: newTeamDescription.trim(),
       })
@@ -322,7 +336,7 @@ export function AppSidebar({ onTeamDataChange, ...props }: AppSidebarProps) {
     if (!friendUsername.trim()) return
     setError(undefined)
     try {
-      await createFriendRequestByUsername(friendUsername.trim())
+      await friendApi.createFriendRequestByUsername(friendUsername.trim())
       setFriendUsername("")
     } catch (requestError) {
       setError(requestError instanceof Error ? requestError.message : "Failed to send friend request.")
@@ -332,7 +346,7 @@ export function AppSidebar({ onTeamDataChange, ...props }: AppSidebarProps) {
   const handleIncomingRequest = async (requestId: string, status: "accepted" | "rejected") => {
     setError(undefined)
     try {
-      await updateFriendRequestStatus(requestId, status)
+      await friendApi.updateFriendRequestStatus(requestId, status)
       await loadPersonalData(currentUserId)
     } catch (requestError) {
       setError(
@@ -351,8 +365,92 @@ export function AppSidebar({ onTeamDataChange, ...props }: AppSidebarProps) {
       isActive: member.userId?.status === "active",
       status: member.userId?.status,
       lastSeenAt: member.userId?.lastSeenAt ?? member.userId?.updatedAt,
+      unreadCount: unreadByUserId[member.userId?._id ?? member._id] ?? 0,
     }))
     .filter((member) => member.id !== currentUserId)
+
+  React.useEffect(() => {
+    const currentUsername = pathname?.startsWith("/chat/")
+      ? decodeURIComponent(pathname.replace("/chat/", ""))
+      : undefined
+    if (!currentUsername) return
+    const activeUser = mappedUsers.find((member) => member.username === currentUsername)
+    if (!activeUser) return
+    setUnreadByUserId((prev) => {
+      if (!prev[activeUser.id]) return prev
+      return { ...prev, [activeUser.id]: 0 }
+    })
+  }, [mappedUsers, pathname])
+
+  React.useEffect(() => {
+    const validIds = new Set(
+      members
+        .map((member) => member.userId?._id ?? member._id)
+        .filter((id) => id !== currentUserId)
+    )
+    setUnreadByUserId((prev) => {
+      const next: Record<string, number> = {}
+      for (const [userId, count] of Object.entries(prev)) {
+        if (validIds.has(userId) && count > 0) next[userId] = count
+      }
+      const prevKeys = Object.keys(prev)
+      const nextKeys = Object.keys(next)
+      if (prevKeys.length === nextKeys.length) {
+        const unchanged = prevKeys.every((key) => prev[key] === next[key])
+        if (unchanged) return prev
+      }
+      return next
+    })
+  }, [currentUserId, members])
+
+  React.useEffect(() => {
+    if (!socket) return
+    const onMessageNew = (payload: {
+      senderId?: string
+      _meta?: { fromUserId?: string; fromUsername?: string }
+    }) => {
+      const senderId = payload?._meta?.fromUserId ?? payload?.senderId
+      if (!senderId || senderId === currentUserId) return
+      const sender = mappedUsers.find((member) => member.id === senderId)
+      if (!sender) return
+      const inSameChat = pathname === `/chat/${sender.username}`
+      if (inSameChat) return
+      setUnreadByUserId((prev) => ({
+        ...prev,
+        [senderId]: (prev[senderId] ?? 0) + 1,
+      }))
+    }
+    socket.on(SOCKET_EVENTS.messageNew, onMessageNew)
+    return () => {
+      socket.off(SOCKET_EVENTS.messageNew, onMessageNew)
+    }
+  }, [currentUserId, mappedUsers, pathname, socket])
+
+  useTeamRealtime({
+    teamId: activeTeamId,
+    onChange: () => {
+      void refreshActiveContext()
+    },
+  })
+  useFriendRealtime(() => {
+    if (!activeTeamId) void refreshActiveContext()
+  })
+  usePresenceRealtime((payload) => {
+    setMembers((prev) =>
+      prev.map((member) =>
+        member.userId?._id === payload.userId
+          ? {
+              ...member,
+              userId: {
+                ...member.userId,
+                status: payload.status,
+                lastSeenAt: payload.lastSeenAt,
+              },
+            }
+          : member
+      )
+    )
+  })
 
   return (
     <>
@@ -431,14 +529,14 @@ export function AppSidebar({ onTeamDataChange, ...props }: AppSidebarProps) {
         </sidebar.SidebarFooter>
         <sidebar.SidebarRail />
       </sidebar.Sidebar>
-      <Sheet open={createTeamOpen} onOpenChange={setCreateTeamOpen}>
-        <SheetContent side="right">
-          <SheetHeader>
-            <SheetTitle>Create Team</SheetTitle>
-            <SheetDescription>
+      <sheet.Sheet open={createTeamOpen} onOpenChange={setCreateTeamOpen}>
+        <sheet.SheetContent side="right">
+          <sheet.SheetHeader>
+            <sheet.SheetTitle>Create Team</sheet.SheetTitle>
+            <sheet.SheetDescription>
               Create a team and switch to it immediately.
-            </SheetDescription>
-          </SheetHeader>
+            </sheet.SheetDescription>
+          </sheet.SheetHeader>
           <form className="flex flex-1 flex-col gap-4 px-4" onSubmit={handleCreateTeamSubmit}>
             <div className="space-y-1">
               <Label htmlFor="team-name">Team name</Label>
@@ -457,14 +555,14 @@ export function AppSidebar({ onTeamDataChange, ...props }: AppSidebarProps) {
                 placeholder="Optional team description"
               />
             </div>
-            <SheetFooter>
+            <sheet.SheetFooter>
               <Button type="submit" disabled={creatingTeam}>
                 {creatingTeam ? "Creating..." : "Create team"}
               </Button>
-            </SheetFooter>
+            </sheet.SheetFooter>
           </form>
-        </SheetContent>
-      </Sheet>
+        </sheet.SheetContent>
+      </sheet.Sheet>
     </>
   )
 }
