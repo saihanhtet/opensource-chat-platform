@@ -1,6 +1,7 @@
 import express from "express";
 import cookieParser from "cookie-parser";
 import cors from "cors";
+import { isAllowedOrigin, parseAllowedOrigins } from "./lib/cors.ts";
 
 import authRoute from "./routes/auth.route.ts";
 import aiRoute from "./routes/ai.route.ts";
@@ -13,10 +14,15 @@ import uploadedFileRoute from "./routes/uploadedFile.route.ts";
 
 export const createApp = () => {
     const app = express();
-    const clientUrl = process.env.CLIENT_URL ?? "http://localhost:5173";
+    const allowedOrigins = parseAllowedOrigins();
     app.use(
         cors({
-            origin: clientUrl,
+            origin: (origin, callback) => {
+                if (isAllowedOrigin(origin, allowedOrigins)) {
+                    return callback(null, true);
+                }
+                return callback(null, false);
+            },
             credentials: true,
         })
     );

@@ -7,6 +7,9 @@ const backendProxyTarget =
   "http://127.0.0.1:3000";
 
 const nextConfig: NextConfig = {
+  turbopack: {
+    root: import.meta.dirname,
+  },
   images: {
     unoptimized: true,
   },

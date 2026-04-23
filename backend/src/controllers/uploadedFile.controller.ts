@@ -126,7 +126,7 @@ export const uploadChatFile = async (req: Request, res: Response) => {
         const preview = message.content.slice(0, 500) || uploaded.secure_url.slice(0, 500);
         const updatedConversation = await Conversation.findByIdAndUpdate(conversationObjectId, {
             lastMessage: preview,
-        }, { new: true });
+        }, { returnDocument: "after" });
         realtime.emitToConversation(String(conversationObjectId), realtime.SOCKET_EVENTS.messageNew, messagePayload);
         await emitToConversationParticipants(conversationObjectId, realtime.SOCKET_EVENTS.messageNew, messagePayload);
         if (updatedConversation) {

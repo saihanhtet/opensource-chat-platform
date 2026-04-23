@@ -5,6 +5,7 @@ import Conversation from "../models/conversation.model.ts";
 import Team from "../models/team.model.ts";
 import TeamMember from "../models/teamMember.model.ts";
 import User from "../models/user.model.ts";
+import { isAllowedOrigin, parseAllowedOrigins } from "../lib/cors.ts";
 import { authenticateSocketUser } from "./auth.ts";
 import { conversationRoom, SOCKET_EVENTS, teamRoom, userRoom } from "./events.ts";
 
@@ -62,11 +63,18 @@ const markPresence = async (userId: string, status: "active" | "offline") => {
 
 export const initSocketServer = (httpServer: HttpServer) => {
     if (io) return io;
+    const allowedOrigins = parseAllowedOrigins();
     io = new Server(httpServer, {
         cors: {
-            origin: process.env.CLIENT_URL ?? "http://localhost:5173",
+            origin: (origin, callback) => {
+                if (isAllowedOrigin(origin, allowedOrigins)) {
+                    return callback(null, true);
+                }
+                return callback(null, false);
+            },
             credentials: true,
         },
+        transports: ["websocket", "polling"],
     });
 
     io.use(async (socket, next) => {

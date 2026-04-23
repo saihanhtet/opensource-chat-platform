@@ -13,9 +13,20 @@ import { useSocket } from "@/lib/use-socket"
 import {
   RiAttachment2,
   RiArrowUpLine,
+  RiDeleteBinLine,
+  RiEdit2Line,
   RiFileDownloadLine,
   RiFileTextLine,
+  RiMore2Fill,
+  RiSaveLine,
+  RiCloseLine,
 } from "@remixicon/react"
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
 
 export default function ChatPage() {
   const resolveAttachmentName = React.useCallback((fileUrl: string) => {
@@ -56,12 +67,31 @@ export default function ChatPage() {
   const [selectedFile, setSelectedFile] = React.useState<File | null>(null)
   const [loading, setLoading] = React.useState(true)
   const [sending, setSending] = React.useState(false)
+  const [actionLoadingMessageId, setActionLoadingMessageId] = React.useState<string>()
+  const [editingMessageId, setEditingMessageId] = React.useState<string>()
+  const [editingDraft, setEditingDraft] = React.useState("")
   const [rewriting, setRewriting] = React.useState(false)
   const [typingUsers, setTypingUsers] = React.useState<string[]>([])
   const [error, setError] = React.useState<string>()
   const listRef = React.useRef<HTMLDivElement>(null)
   const fileInputRef = React.useRef<HTMLInputElement>(null)
   const socket = useSocket()
+  const timeFormatter = React.useMemo(
+    () =>
+      new Intl.DateTimeFormat(undefined, {
+        hour: "2-digit",
+        minute: "2-digit",
+      }),
+    []
+  )
+  const formatMessageTime = React.useCallback(
+    (value: string) => {
+      const date = new Date(value)
+      if (Number.isNaN(date.getTime())) return ""
+      return timeFormatter.format(date)
+    },
+    [timeFormatter]
+  )
   const syncMessages = React.useCallback(
     async (id: string) => {
       const latest = await chatApi.getConversationMessages(id)
@@ -230,6 +260,54 @@ export default function ChatPage() {
     }
   }
 
+  const handleStartEdit = React.useCallback((message: chatApi.ChatMessage) => {
+    setEditingMessageId(message._id)
+    setEditingDraft(message.content ?? "")
+    setError(undefined)
+  }, [])
+
+  const handleCancelEdit = React.useCallback(() => {
+    setEditingMessageId(undefined)
+    setEditingDraft("")
+  }, [])
+
+  const handleSaveEdit = React.useCallback(
+    async (message: chatApi.ChatMessage) => {
+      if (!editingDraft.trim() && !message.fileUrl) {
+        setError("Message content cannot be empty")
+        return
+      }
+      setActionLoadingMessageId(message._id)
+      setError(undefined)
+      try {
+        const updated = await chatApi.updateMessage(message._id, {
+          content: editingDraft.trim(),
+        })
+        setMessages((prev) => prev.map((item) => (item._id === updated._id ? updated : item)))
+        setEditingMessageId(undefined)
+        setEditingDraft("")
+      } catch (editError) {
+        setError(editError instanceof Error ? editError.message : "Failed to edit message")
+      } finally {
+        setActionLoadingMessageId(undefined)
+      }
+    },
+    [editingDraft]
+  )
+
+  const handleDelete = React.useCallback(async (messageId: string) => {
+    setActionLoadingMessageId(messageId)
+    setError(undefined)
+    try {
+      await chatApi.deleteMessage(messageId)
+      setMessages((prev) => prev.filter((message) => message._id !== messageId))
+    } catch (deleteError) {
+      setError(deleteError instanceof Error ? deleteError.message : "Failed to delete message")
+    } finally {
+      setActionLoadingMessageId(undefined)
+    }
+  }, [])
+
   return (
     <>
       <header className="flex h-14 shrink-0 items-center gap-2 border-b px-4">
@@ -254,22 +332,53 @@ export default function ChatPage() {
             ) : null}
             {messages.map((message) => {
               const isMine = message.senderId === myUserId
+              const isEditing = editingMessageId === message._id
               const isAudioAttachment =
                 !!message.fileUrl && attachmentKind(message.fileUrl) === "audio"
               return (
                 <div key={message._id} className={`flex ${isMine ? "justify-end" : "justify-start"}`}>
-                  <div
-                    className={`px-3 py-2 text-sm shadow-sm ${
+                  <div className="flex max-w-[78%] flex-col">
+                    <div
+                      className={`px-3 py-2 text-sm shadow-sm ${
                       isMine
                         ? "rounded-2xl rounded-br-md bg-primary text-primary-foreground"
                         : "rounded-2xl rounded-bl-md border bg-background text-foreground"
                     } ${
                       isAudioAttachment
                         ? "w-[min(22rem,82vw)]"
-                        : "max-w-[78%]"
+                        : ""
                     }`}
-                  >
-                    {message.content ? <p>{message.content}</p> : null}
+                    >
+                    {isEditing ? (
+                      <div className="space-y-2">
+                        <input
+                          value={editingDraft}
+                          onChange={(event) => setEditingDraft(event.target.value)}
+                          className="w-full rounded-md border border-border bg-white px-2 py-1 text-sm text-slate-900 placeholder:text-slate-500 dark:bg-zinc-900 dark:text-slate-100 dark:placeholder:text-slate-400"
+                        />
+                        <div className="flex items-center justify-end gap-2">
+                          <button
+                            type="button"
+                            onClick={handleCancelEdit}
+                            className="inline-flex items-center gap-1 rounded-md border px-2 py-1 text-xs"
+                          >
+                            <RiCloseLine className="size-3.5" />
+                            Cancel
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => void handleSaveEdit(message)}
+                            disabled={actionLoadingMessageId === message._id}
+                            className="inline-flex items-center gap-1 rounded-md border px-2 py-1 text-xs"
+                          >
+                            <RiSaveLine className="size-3.5" />
+                            Save
+                          </button>
+                        </div>
+                      </div>
+                    ) : message.content ? (
+                      <p>{message.content}</p>
+                    ) : null}
                     {message.fileUrl ? (
                       <div className="mt-2">
                         {attachmentKind(message.fileUrl) === "image" ? (
@@ -326,6 +435,38 @@ export default function ChatPage() {
                         ) : null}
                       </div>
                     ) : null}
+                    </div>
+                    <div className={`mt-1 flex items-center gap-2 text-[11px] text-muted-foreground ${isMine ? "justify-end" : "justify-start"}`}>
+                      <span>{formatMessageTime(message.timestamp)}</span>
+                      {message.editedAt ? <span>(edited)</span> : null}
+                      {isMine && !isEditing ? (
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild>
+                            <button
+                              type="button"
+                              className="inline-flex items-center rounded p-1 hover:bg-muted"
+                              disabled={actionLoadingMessageId === message._id}
+                              aria-label="Message actions"
+                            >
+                              <RiMore2Fill className="size-3.5" />
+                            </button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align={isMine ? "end" : "start"} className="w-32">
+                            <DropdownMenuItem onClick={() => handleStartEdit(message)}>
+                              <RiEdit2Line className="size-4" />
+                              Edit
+                            </DropdownMenuItem>
+                            <DropdownMenuItem
+                              variant="destructive"
+                              onClick={() => void handleDelete(message._id)}
+                            >
+                              <RiDeleteBinLine className="size-4" />
+                              Delete
+                            </DropdownMenuItem>
+                          </DropdownMenuContent>
+                        </DropdownMenu>
+                      ) : null}
+                    </div>
                   </div>
                 </div>
               )

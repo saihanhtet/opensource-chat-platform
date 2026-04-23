@@ -77,7 +77,7 @@ export const createMessage = async (req: Request, res: Response) => {
 
         const updatedConversation = await Conversation.findByIdAndUpdate(conversationId, {
             lastMessage: preview,
-        }, { new: true });
+        }, { returnDocument: "after" });
         realtime.emitToConversation(String(conversationId), realtime.SOCKET_EVENTS.messageNew, messagePayload);
         await emitToConversationParticipants(conversationId, realtime.SOCKET_EVENTS.messageNew, messagePayload);
         if (updatedConversation) {
@@ -168,8 +168,16 @@ export const updateMessage = async (req: Request, res: Response) => {
             return res.status(403).json({ message: "Forbidden" });
         }
 
+        let changed = false;
         if (parsed.data.content !== undefined) message.content = parsed.data.content;
-        if (parsed.data.fileUrl !== undefined) message.fileUrl = parsed.data.fileUrl;
+        if (parsed.data.content !== undefined) changed = true;
+        if (parsed.data.fileUrl !== undefined) {
+            message.fileUrl = parsed.data.fileUrl;
+            changed = true;
+        }
+        if (changed) {
+            message.editedAt = new Date();
+        }
         await message.save();
         realtime.emitToConversation(String(message.conversationId), realtime.SOCKET_EVENTS.messageUpdated, message);
         await emitToConversationParticipants(

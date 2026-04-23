@@ -18,6 +18,7 @@ export type ChatMessage = {
   content: string
   fileUrl?: string
   timestamp: string
+  editedAt?: string | null
 }
 
 export type UploadedFileRecord = {
@@ -115,6 +116,30 @@ export async function sendMessage(input: {
     body: JSON.stringify(input),
   })
   return parseJson<ChatMessage>(res)
+}
+
+export async function updateMessage(
+  messageId: string,
+  input: {
+    content?: string
+    fileUrl?: string
+  }
+): Promise<ChatMessage> {
+  const res = await fetch(apiUrl(`/api/messages/${encodeURIComponent(messageId)}`), {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    credentials: "include",
+    body: JSON.stringify(input),
+  })
+  return parseJson<ChatMessage>(res)
+}
+
+export async function deleteMessage(messageId: string): Promise<void> {
+  const res = await fetch(apiUrl(`/api/messages/${encodeURIComponent(messageId)}`), {
+    method: "DELETE",
+    credentials: "include",
+  })
+  await parseJson<{ message: string }>(res)
 }
 
 export async function uploadChatFile(input: {
