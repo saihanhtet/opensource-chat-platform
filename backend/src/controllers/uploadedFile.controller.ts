@@ -2,17 +2,14 @@ import type { Request, Response } from "express";
 import { unlink } from "fs/promises";
 import mongoose from "mongoose";
 
-import { reqParamId, sendServerError, sendValidationError } from "../lib/utils.ts";
 import cloud from "../lib/cloud.ts";
+import * as utils from "../lib/utils.ts";
 import Conversation from "../models/conversation.model.ts";
 import Message from "../models/message.model.ts";
-import UploadedFile from "../models/uploadedFile.model.ts";
-import {
-    createUploadedFileSchema,
-    updateUploadedFileSchema,
-} from "../schemas/uploadedFile.schema.ts";
-import { emitToConversation, emitToUser, SOCKET_EVENTS } from "../socket/realtime.ts";
 import Team from "../models/team.model.ts";
+import UploadedFile from "../models/uploadedFile.model.ts";
+import * as uploadedFileSchema from "../schemas/uploadedFile.schema.ts";
+import * as realtime from "../socket/realtime.ts";
 
 const badId = (res: Response) =>
     res.status(400).json({ message: "Invalid id" });
@@ -34,7 +31,7 @@ const emitToConversationParticipants = async (
     const conversation = await Conversation.findById(conversationId).select("participantIds");
     if (!conversation) return;
     for (const participantId of conversation.participantIds) {
-        emitToUser(String(participantId), event, payload);
+        realtime.emitToUser(String(participantId), event, payload);
     }
 };
 
@@ -52,8 +49,8 @@ export const createUploadedFile = async (req: Request, res: Response) => {
     try {
         if (!req.user) return res.status(401).json({ message: "Unauthorized" });
 
-        const parsed = createUploadedFileSchema.safeParse(req.body);
-        if (!parsed.success) return sendValidationError(res, parsed.error);
+        const parsed = uploadedFileSchema.createUploadedFileSchema.safeParse(req.body);
+        if (!parsed.success) return utils.sendValidationError(res, parsed.error);
 
         const conversationId = new mongoose.Types.ObjectId(parsed.data.conversationId);
         const me = req.user._id as mongoose.Types.ObjectId;
@@ -71,7 +68,7 @@ export const createUploadedFile = async (req: Request, res: Response) => {
         });
         return res.status(201).json(doc);
     } catch (error) {
-        return sendServerError(res, "createUploadedFile", error);
+        return utils.sendServerError(res, "createUploadedFile", error);
     }
 };
 
@@ -130,13 +127,13 @@ export const uploadChatFile = async (req: Request, res: Response) => {
         const updatedConversation = await Conversation.findByIdAndUpdate(conversationObjectId, {
             lastMessage: preview,
         }, { new: true });
-        emitToConversation(String(conversationObjectId), SOCKET_EVENTS.messageNew, messagePayload);
-        await emitToConversationParticipants(conversationObjectId, SOCKET_EVENTS.messageNew, messagePayload);
+        realtime.emitToConversation(String(conversationObjectId), realtime.SOCKET_EVENTS.messageNew, messagePayload);
+        await emitToConversationParticipants(conversationObjectId, realtime.SOCKET_EVENTS.messageNew, messagePayload);
         if (updatedConversation) {
-            emitToConversation(String(conversationObjectId), SOCKET_EVENTS.conversationUpdated, updatedConversation);
+            realtime.emitToConversation(String(conversationObjectId), realtime.SOCKET_EVENTS.conversationUpdated, updatedConversation);
             await emitToConversationParticipants(
                 conversationObjectId,
-                SOCKET_EVENTS.conversationUpdated,
+                realtime.SOCKET_EVENTS.conversationUpdated,
                 updatedConversation
             );
         }
@@ -146,7 +143,7 @@ export const uploadChatFile = async (req: Request, res: Response) => {
             message,
         });
     } catch (error) {
-        return sendServerError(res, "uploadChatFile", error);
+        return utils.sendServerError(res, "uploadChatFile", error);
     } finally {
         if (tempUploadPath) {
             await unlink(tempUploadPath).catch(() => {});
@@ -182,7 +179,7 @@ export const listUploadedFiles = async (req: Request, res: Response) => {
         }).sort({ uploadedAt: -1 });
         return res.status(200).json(files);
     } catch (error) {
-        return sendServerError(res, "listUploadedFiles", error);
+        return utils.sendServerError(res, "listUploadedFiles", error);
     }
 };
 
@@ -190,7 +187,7 @@ export const getUploadedFileById = async (req: Request, res: Response) => {
     try {
         if (!req.user) return res.status(401).json({ message: "Unauthorized" });
 
-        const id = reqParamId(req);
+        const id = utils.reqParamId(req);
         if (!id || !mongoose.Types.ObjectId.isValid(id)) return badId(res);
 
         const doc = await UploadedFile.findById(id);
@@ -206,7 +203,7 @@ export const getUploadedFileById = async (req: Request, res: Response) => {
         }
         return res.status(200).json(doc);
     } catch (error) {
-        return sendServerError(res, "getUploadedFileById", error);
+        return utils.sendServerError(res, "getUploadedFileById", error);
     }
 };
 
@@ -214,11 +211,11 @@ export const updateUploadedFile = async (req: Request, res: Response) => {
     try {
         if (!req.user) return res.status(401).json({ message: "Unauthorized" });
 
-        const id = reqParamId(req);
+        const id = utils.reqParamId(req);
         if (!id || !mongoose.Types.ObjectId.isValid(id)) return badId(res);
 
-        const parsed = updateUploadedFileSchema.safeParse(req.body);
-        if (!parsed.success) return sendValidationError(res, parsed.error);
+        const parsed = uploadedFileSchema.updateUploadedFileSchema.safeParse(req.body);
+        if (!parsed.success) return utils.sendValidationError(res, parsed.error);
 
         const doc = await UploadedFile.findById(id);
         if (!doc) return res.status(404).json({ message: "File not found" });
@@ -233,7 +230,7 @@ export const updateUploadedFile = async (req: Request, res: Response) => {
         await doc.save();
         return res.status(200).json(doc);
     } catch (error) {
-        return sendServerError(res, "updateUploadedFile", error);
+        return utils.sendServerError(res, "updateUploadedFile", error);
     }
 };
 
@@ -241,7 +238,7 @@ export const deleteUploadedFile = async (req: Request, res: Response) => {
     try {
         if (!req.user) return res.status(401).json({ message: "Unauthorized" });
 
-        const id = reqParamId(req);
+        const id = utils.reqParamId(req);
         if (!id || !mongoose.Types.ObjectId.isValid(id)) return badId(res);
 
         const doc = await UploadedFile.findById(id);
@@ -254,6 +251,6 @@ export const deleteUploadedFile = async (req: Request, res: Response) => {
         await UploadedFile.findByIdAndDelete(id);
         return res.status(200).json({ message: "File deleted" });
     } catch (error) {
-        return sendServerError(res, "deleteUploadedFile", error);
+        return utils.sendServerError(res, "deleteUploadedFile", error);
     }
 };

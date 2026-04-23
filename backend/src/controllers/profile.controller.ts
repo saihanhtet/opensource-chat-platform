@@ -1,16 +1,16 @@
-import type { Request, Response } from "express";
 import bcrypt from "bcryptjs";
+import type { Request, Response } from "express";
 import { unlink } from "fs/promises";
 import { MongoServerError } from "mongodb";
 import { z } from "zod";
 import cloud from "../lib/cloud";
 import User from "../models/user.model";
 
-import { changePasswordSchema, ProfileUpdateSchema } from "../schemas/auth.schema";
-import { sendValidationError } from "../lib/utils.ts";
+import * as utils from "../lib/utils.ts";
+import * as authSchema from "../schemas/auth.schema";
 
-type ProfileUpdateInput = z.infer<typeof ProfileUpdateSchema>;
-type ChangePasswordInput = z.infer<typeof changePasswordSchema>;
+type ProfileUpdateInput = z.infer<typeof authSchema.ProfileUpdateSchema>;
+type ChangePasswordInput = z.infer<typeof authSchema.changePasswordSchema>;
 
 export const editProfile = async (
     req: Request,
@@ -18,9 +18,9 @@ export const editProfile = async (
 ) => {
     const tempUploadPath = req.file?.path;
     try {
-        const parsed = ProfileUpdateSchema.safeParse(req.body);
+        const parsed = authSchema.ProfileUpdateSchema.safeParse(req.body);
         if (!parsed.success) {
-            return sendValidationError(res, parsed.error);
+            return utils.sendValidationError(res, parsed.error);
         }
 
         const { username, email, bio }: ProfileUpdateInput = parsed.data;
@@ -68,9 +68,9 @@ export const changePassword = async (req: Request, res: Response) => {
     try {
         if (!req.user) return res.status(401).json({ message: "Unauthorized" });
 
-        const parsed = changePasswordSchema.safeParse(req.body);
+        const parsed = authSchema.changePasswordSchema.safeParse(req.body);
         if (!parsed.success) {
-            return sendValidationError(res, parsed.error);
+            return utils.sendValidationError(res, parsed.error);
         }
 
         const { currentPassword, newPassword }: ChangePasswordInput = parsed.data;
@@ -99,7 +99,8 @@ export const getUserByUsername = async (req: Request, res: Response) => {
     try {
         if (!req.user) return res.status(401).json({ message: "Unauthorized" });
 
-        const username = req.params["username"]?.trim();
+        const usernameParam = req.params["username"];
+        const username = (Array.isArray(usernameParam) ? usernameParam[0] : usernameParam)?.trim();
         if (!username) {
             return res.status(400).json({ message: "Username is required" });
         }

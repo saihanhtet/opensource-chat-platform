@@ -1,12 +1,12 @@
 import type { Request, Response } from "express";
 import mongoose from "mongoose";
 
-import { reqParamId, sendServerError, sendValidationError } from "../lib/utils.ts";
+import * as utils from "../lib/utils.ts";
 import Conversation from "../models/conversation.model.ts";
 import Message from "../models/message.model.ts";
 import Team from "../models/team.model.ts";
-import { createMessageSchema, updateMessageSchema } from "../schemas/message.schema.ts";
-import { emitToConversation, emitToUser, SOCKET_EVENTS } from "../socket/realtime.ts";
+import * as messageSchema from "../schemas/message.schema.ts";
+import * as realtime from "../socket/realtime.ts";
 
 const badId = (res: Response) =>
     res.status(400).json({ message: "Invalid id" });
@@ -28,7 +28,7 @@ const emitToConversationParticipants = async (
     const conversation = await Conversation.findById(conversationId).select("participantIds");
     if (!conversation) return;
     for (const participantId of conversation.participantIds) {
-        emitToUser(String(participantId), event, payload);
+        realtime.emitToUser(String(participantId), event, payload);
     }
 };
 
@@ -46,8 +46,8 @@ export const createMessage = async (req: Request, res: Response) => {
     try {
         if (!req.user) return res.status(401).json({ message: "Unauthorized" });
 
-        const parsed = createMessageSchema.safeParse(req.body);
-        if (!parsed.success) return sendValidationError(res, parsed.error);
+        const parsed = messageSchema.createMessageSchema.safeParse(req.body);
+        if (!parsed.success) return utils.sendValidationError(res, parsed.error);
 
         const conversationId = new mongoose.Types.ObjectId(parsed.data.conversationId);
         const me = req.user._id as mongoose.Types.ObjectId;
@@ -78,20 +78,20 @@ export const createMessage = async (req: Request, res: Response) => {
         const updatedConversation = await Conversation.findByIdAndUpdate(conversationId, {
             lastMessage: preview,
         }, { new: true });
-        emitToConversation(String(conversationId), SOCKET_EVENTS.messageNew, messagePayload);
-        await emitToConversationParticipants(conversationId, SOCKET_EVENTS.messageNew, messagePayload);
+        realtime.emitToConversation(String(conversationId), realtime.SOCKET_EVENTS.messageNew, messagePayload);
+        await emitToConversationParticipants(conversationId, realtime.SOCKET_EVENTS.messageNew, messagePayload);
         if (updatedConversation) {
-            emitToConversation(String(conversationId), SOCKET_EVENTS.conversationUpdated, updatedConversation);
+            realtime.emitToConversation(String(conversationId), realtime.SOCKET_EVENTS.conversationUpdated, updatedConversation);
             await emitToConversationParticipants(
                 conversationId,
-                SOCKET_EVENTS.conversationUpdated,
+                realtime.SOCKET_EVENTS.conversationUpdated,
                 updatedConversation
             );
         }
 
         return res.status(201).json(message);
     } catch (error) {
-        return sendServerError(res, "createMessage", error);
+        return utils.sendServerError(res, "createMessage", error);
     }
 };
 
@@ -123,7 +123,7 @@ export const listMessages = async (req: Request, res: Response) => {
         }).sort({ timestamp: -1 });
         return res.status(200).json(messages);
     } catch (error) {
-        return sendServerError(res, "listMessages", error);
+        return utils.sendServerError(res, "listMessages", error);
     }
 };
 
@@ -131,7 +131,7 @@ export const getMessageById = async (req: Request, res: Response) => {
     try {
         if (!req.user) return res.status(401).json({ message: "Unauthorized" });
 
-        const id = reqParamId(req);
+        const id = utils.reqParamId(req);
         if (!id || !mongoose.Types.ObjectId.isValid(id)) return badId(res);
 
         const message = await Message.findById(id);
@@ -147,7 +147,7 @@ export const getMessageById = async (req: Request, res: Response) => {
         }
         return res.status(200).json(message);
     } catch (error) {
-        return sendServerError(res, "getMessageById", error);
+        return utils.sendServerError(res, "getMessageById", error);
     }
 };
 
@@ -155,11 +155,11 @@ export const updateMessage = async (req: Request, res: Response) => {
     try {
         if (!req.user) return res.status(401).json({ message: "Unauthorized" });
 
-        const id = reqParamId(req);
+        const id = utils.reqParamId(req);
         if (!id || !mongoose.Types.ObjectId.isValid(id)) return badId(res);
 
-        const parsed = updateMessageSchema.safeParse(req.body);
-        if (!parsed.success) return sendValidationError(res, parsed.error);
+        const parsed = messageSchema.updateMessageSchema.safeParse(req.body);
+        if (!parsed.success) return utils.sendValidationError(res, parsed.error);
 
         const message = await Message.findById(id);
         if (!message) return res.status(404).json({ message: "Message not found" });
@@ -171,15 +171,15 @@ export const updateMessage = async (req: Request, res: Response) => {
         if (parsed.data.content !== undefined) message.content = parsed.data.content;
         if (parsed.data.fileUrl !== undefined) message.fileUrl = parsed.data.fileUrl;
         await message.save();
-        emitToConversation(String(message.conversationId), SOCKET_EVENTS.messageUpdated, message);
+        realtime.emitToConversation(String(message.conversationId), realtime.SOCKET_EVENTS.messageUpdated, message);
         await emitToConversationParticipants(
             message.conversationId as mongoose.Types.ObjectId,
-            SOCKET_EVENTS.messageUpdated,
+            realtime.SOCKET_EVENTS.messageUpdated,
             message
         );
         return res.status(200).json(message);
     } catch (error) {
-        return sendServerError(res, "updateMessage", error);
+        return utils.sendServerError(res, "updateMessage", error);
     }
 };
 
@@ -187,7 +187,7 @@ export const deleteMessage = async (req: Request, res: Response) => {
     try {
         if (!req.user) return res.status(401).json({ message: "Unauthorized" });
 
-        const id = reqParamId(req);
+        const id = utils.reqParamId(req);
         if (!id || !mongoose.Types.ObjectId.isValid(id)) return badId(res);
 
         const message = await Message.findById(id);
@@ -199,14 +199,14 @@ export const deleteMessage = async (req: Request, res: Response) => {
 
         const conversationId = String(message.conversationId);
         await Message.findByIdAndDelete(id);
-        emitToConversation(conversationId, SOCKET_EVENTS.messageDeleted, { _id: id, conversationId });
+        realtime.emitToConversation(conversationId, realtime.SOCKET_EVENTS.messageDeleted, { _id: id, conversationId });
         await emitToConversationParticipants(
             message.conversationId as mongoose.Types.ObjectId,
-            SOCKET_EVENTS.messageDeleted,
+            realtime.SOCKET_EVENTS.messageDeleted,
             { _id: id, conversationId }
         );
         return res.status(200).json({ message: "Message deleted" });
     } catch (error) {
-        return sendServerError(res, "deleteMessage", error);
+        return utils.sendServerError(res, "deleteMessage", error);
     }
 };

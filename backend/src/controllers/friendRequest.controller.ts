@@ -1,18 +1,10 @@
 import type { Request, Response } from "express";
 import mongoose from "mongoose";
 
-import {
-    isDuplicateKeyError,
-    reqParamId,
-    sendServerError,
-    sendValidationError,
-} from "../lib/utils.ts";
+import * as utils from "../lib/utils.ts";
 import FriendRequest from "../models/friendRequest.model.ts";
-import {
-    createFriendRequestSchema,
-    updateFriendRequestSchema,
-} from "../schemas/friendRequest.schema.ts";
-import { emitToUser, SOCKET_EVENTS } from "../socket/realtime.ts";
+import * as friendRequestSchema from "../schemas/friendRequest.schema.ts";
+import * as realtime from "../socket/realtime.ts";
 
 const badId = (res: Response) =>
     res.status(400).json({ message: "Invalid id" });
@@ -21,8 +13,8 @@ export const createFriendRequest = async (req: Request, res: Response) => {
     try {
         if (!req.user) return res.status(401).json({ message: "Unauthorized" });
 
-        const parsed = createFriendRequestSchema.safeParse(req.body);
-        if (!parsed.success) return sendValidationError(res, parsed.error);
+        const parsed = friendRequestSchema.createFriendRequestSchema.safeParse(req.body);
+        if (!parsed.success) return utils.sendValidationError(res, parsed.error);
 
         const receiverId = new mongoose.Types.ObjectId(parsed.data.receiverId);
         const me = req.user._id as mongoose.Types.ObjectId;
@@ -44,16 +36,16 @@ export const createFriendRequest = async (req: Request, res: Response) => {
                 spaceName: "Personal",
             },
         };
-        emitToUser(String(me), SOCKET_EVENTS.friendRequestCreated, payload);
-        emitToUser(String(receiverId), SOCKET_EVENTS.friendRequestCreated, payload);
+        realtime.emitToUser(String(me), realtime.SOCKET_EVENTS.friendRequestCreated, payload);
+        realtime.emitToUser(String(receiverId), realtime.SOCKET_EVENTS.friendRequestCreated, payload);
         return res.status(201).json(doc);
     } catch (error) {
-        if (isDuplicateKeyError(error)) {
+        if (utils.isDuplicateKeyError(error)) {
             return res.status(409).json({
                 message: "A pending friend request already exists between these users",
             });
         }
-        return sendServerError(res, "createFriendRequest", error);
+        return utils.sendServerError(res, "createFriendRequest", error);
     }
 };
 
@@ -70,7 +62,7 @@ export const listFriendRequests = async (req: Request, res: Response) => {
             .sort({ createdAt: -1 });
         return res.status(200).json(requests);
     } catch (error) {
-        return sendServerError(res, "listFriendRequests", error);
+        return utils.sendServerError(res, "listFriendRequests", error);
     }
 };
 
@@ -78,7 +70,7 @@ export const getFriendRequestById = async (req: Request, res: Response) => {
     try {
         if (!req.user) return res.status(401).json({ message: "Unauthorized" });
 
-        const id = reqParamId(req);
+        const id = utils.reqParamId(req);
         if (!id || !mongoose.Types.ObjectId.isValid(id)) return badId(res);
 
         const doc = await FriendRequest.findById(id);
@@ -90,7 +82,7 @@ export const getFriendRequestById = async (req: Request, res: Response) => {
         }
         return res.status(200).json(doc);
     } catch (error) {
-        return sendServerError(res, "getFriendRequestById", error);
+        return utils.sendServerError(res, "getFriendRequestById", error);
     }
 };
 
@@ -98,11 +90,11 @@ export const updateFriendRequest = async (req: Request, res: Response) => {
     try {
         if (!req.user) return res.status(401).json({ message: "Unauthorized" });
 
-        const id = reqParamId(req);
+        const id = utils.reqParamId(req);
         if (!id || !mongoose.Types.ObjectId.isValid(id)) return badId(res);
 
-        const parsed = updateFriendRequestSchema.safeParse(req.body);
-        if (!parsed.success) return sendValidationError(res, parsed.error);
+        const parsed = friendRequestSchema.updateFriendRequestSchema.safeParse(req.body);
+        if (!parsed.success) return utils.sendValidationError(res, parsed.error);
 
         const doc = await FriendRequest.findById(id);
         if (!doc) return res.status(404).json({ message: "Friend request not found" });
@@ -126,11 +118,11 @@ export const updateFriendRequest = async (req: Request, res: Response) => {
                 spaceName: "Personal",
             },
         };
-        emitToUser(String(doc.senderId), SOCKET_EVENTS.friendRequestUpdated, payload);
-        emitToUser(String(doc.receiverId), SOCKET_EVENTS.friendRequestUpdated, payload);
+        realtime.emitToUser(String(doc.senderId), realtime.SOCKET_EVENTS.friendRequestUpdated, payload);
+        realtime.emitToUser(String(doc.receiverId), realtime.SOCKET_EVENTS.friendRequestUpdated, payload);
         return res.status(200).json(doc);
     } catch (error) {
-        return sendServerError(res, "updateFriendRequest", error);
+        return utils.sendServerError(res, "updateFriendRequest", error);
     }
 };
 
@@ -138,7 +130,7 @@ export const deleteFriendRequest = async (req: Request, res: Response) => {
     try {
         if (!req.user) return res.status(401).json({ message: "Unauthorized" });
 
-        const id = reqParamId(req);
+        const id = utils.reqParamId(req);
         if (!id || !mongoose.Types.ObjectId.isValid(id)) return badId(res);
 
         const doc = await FriendRequest.findById(id);
@@ -152,10 +144,10 @@ export const deleteFriendRequest = async (req: Request, res: Response) => {
         const senderId = String(doc.senderId);
         const receiverId = String(doc.receiverId);
         await FriendRequest.findByIdAndDelete(id);
-        emitToUser(senderId, SOCKET_EVENTS.friendRequestDeleted, { _id: id });
-        emitToUser(receiverId, SOCKET_EVENTS.friendRequestDeleted, { _id: id });
+        realtime.emitToUser(senderId, realtime.SOCKET_EVENTS.friendRequestDeleted, { _id: id });
+        realtime.emitToUser(receiverId, realtime.SOCKET_EVENTS.friendRequestDeleted, { _id: id });
         return res.status(200).json({ message: "Friend request deleted" });
     } catch (error) {
-        return sendServerError(res, "deleteFriendRequest", error);
+        return utils.sendServerError(res, "deleteFriendRequest", error);
     }
 };

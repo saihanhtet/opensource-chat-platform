@@ -1,14 +1,11 @@
 import type { Request, Response } from "express";
 import mongoose from "mongoose";
 
-import { reqParamId, sendServerError, sendValidationError } from "../lib/utils.ts";
+import * as utils from "../lib/utils.ts";
 import Conversation from "../models/conversation.model.ts";
 import User from "../models/user.model.ts";
-import {
-    createConversationSchema,
-    updateConversationSchema,
-} from "../schemas/conversation.schema.ts";
-import { emitToConversation, SOCKET_EVENTS } from "../socket/realtime.ts";
+import * as conversationSchema from "../schemas/conversation.schema.ts";
+import * as realtime from "../socket/realtime.ts";
 
 const badId = (res: Response) =>
     res.status(400).json({ message: "Invalid id" });
@@ -25,8 +22,8 @@ export const createConversation = async (req: Request, res: Response) => {
     try {
         if (!req.user) return res.status(401).json({ message: "Unauthorized" });
 
-        const parsed = createConversationSchema.safeParse(req.body);
-        if (!parsed.success) return sendValidationError(res, parsed.error);
+        const parsed = conversationSchema.createConversationSchema.safeParse(req.body);
+        if (!parsed.success) return utils.sendValidationError(res, parsed.error);
 
         const participantObjectIds = parsed.data.participantIds.map(
             (id) => new mongoose.Types.ObjectId(id)
@@ -46,10 +43,10 @@ export const createConversation = async (req: Request, res: Response) => {
             participantIds: participantObjectIds,
             lastMessage: parsed.data.lastMessage ?? "",
         });
-        emitToConversation(String(doc._id), SOCKET_EVENTS.conversationUpdated, doc);
+        realtime.emitToConversation(String(doc._id), realtime.SOCKET_EVENTS.conversationUpdated, doc);
         return res.status(201).json(doc);
     } catch (error) {
-        return sendServerError(res, "createConversation", error);
+        return utils.sendServerError(res, "createConversation", error);
     }
 };
 
@@ -63,7 +60,7 @@ export const listConversations = async (req: Request, res: Response) => {
         }).sort({ updatedAt: -1 });
         return res.status(200).json(conversations);
     } catch (error) {
-        return sendServerError(res, "listConversations", error);
+        return utils.sendServerError(res, "listConversations", error);
     }
 };
 
@@ -71,7 +68,7 @@ export const getConversationById = async (req: Request, res: Response) => {
     try {
         if (!req.user) return res.status(401).json({ message: "Unauthorized" });
 
-        const id = reqParamId(req);
+        const id = utils.reqParamId(req);
         if (!id || !mongoose.Types.ObjectId.isValid(id)) return badId(res);
 
         const conversation = await Conversation.findById(id);
@@ -83,7 +80,7 @@ export const getConversationById = async (req: Request, res: Response) => {
         }
         return res.status(200).json(conversation);
     } catch (error) {
-        return sendServerError(res, "getConversationById", error);
+        return utils.sendServerError(res, "getConversationById", error);
     }
 };
 
@@ -91,11 +88,11 @@ export const updateConversation = async (req: Request, res: Response) => {
     try {
         if (!req.user) return res.status(401).json({ message: "Unauthorized" });
 
-        const id = reqParamId(req);
+        const id = utils.reqParamId(req);
         if (!id || !mongoose.Types.ObjectId.isValid(id)) return badId(res);
 
-        const parsed = updateConversationSchema.safeParse(req.body);
-        if (!parsed.success) return sendValidationError(res, parsed.error);
+        const parsed = conversationSchema.updateConversationSchema.safeParse(req.body);
+        if (!parsed.success) return utils.sendValidationError(res, parsed.error);
 
         const conversation = await Conversation.findById(id);
         if (!conversation) {
@@ -126,10 +123,10 @@ export const updateConversation = async (req: Request, res: Response) => {
             conversation.lastMessage = parsed.data.lastMessage;
         }
         await conversation.save();
-        emitToConversation(String(conversation._id), SOCKET_EVENTS.conversationUpdated, conversation);
+        realtime.emitToConversation(String(conversation._id), realtime.SOCKET_EVENTS.conversationUpdated, conversation);
         return res.status(200).json(conversation);
     } catch (error) {
-        return sendServerError(res, "updateConversation", error);
+        return utils.sendServerError(res, "updateConversation", error);
     }
 };
 
@@ -137,7 +134,7 @@ export const deleteConversation = async (req: Request, res: Response) => {
     try {
         if (!req.user) return res.status(401).json({ message: "Unauthorized" });
 
-        const id = reqParamId(req);
+        const id = utils.reqParamId(req);
         if (!id || !mongoose.Types.ObjectId.isValid(id)) return badId(res);
 
         const conversation = await Conversation.findById(id);
@@ -149,13 +146,13 @@ export const deleteConversation = async (req: Request, res: Response) => {
         }
 
         await Conversation.findByIdAndDelete(id);
-        emitToConversation(String(id), SOCKET_EVENTS.conversationUpdated, {
+        realtime.emitToConversation(String(id), realtime.SOCKET_EVENTS.conversationUpdated, {
             _id: String(id),
             deleted: true,
         });
         return res.status(200).json({ message: "Conversation deleted" });
     } catch (error) {
-        return sendServerError(res, "deleteConversation", error);
+        return utils.sendServerError(res, "deleteConversation", error);
     }
 };
 
@@ -163,7 +160,7 @@ export const setTypingStatus = async (req: Request, res: Response) => {
     try {
         if (!req.user) return res.status(401).json({ message: "Unauthorized" });
 
-        const id = reqParamId(req);
+        const id = utils.reqParamId(req);
         if (!id || !mongoose.Types.ObjectId.isValid(id)) return badId(res);
 
         const conversation = await Conversation.findById(id);
@@ -189,7 +186,7 @@ export const setTypingStatus = async (req: Request, res: Response) => {
 
         return res.status(200).json({ ok: true });
     } catch (error) {
-        return sendServerError(res, "setTypingStatus", error);
+        return utils.sendServerError(res, "setTypingStatus", error);
     }
 };
 
@@ -197,7 +194,7 @@ export const getTypingStatus = async (req: Request, res: Response) => {
     try {
         if (!req.user) return res.status(401).json({ message: "Unauthorized" });
 
-        const id = reqParamId(req);
+        const id = utils.reqParamId(req);
         if (!id || !mongoose.Types.ObjectId.isValid(id)) return badId(res);
 
         const conversation = await Conversation.findById(id);
@@ -216,7 +213,7 @@ export const getTypingStatus = async (req: Request, res: Response) => {
         }
         if (conversationMap.size === 0) {
             typingState.delete(id);
-            emitToConversation(id, SOCKET_EVENTS.typingUpdated, { conversationId: id, users: [] });
+            realtime.emitToConversation(id, realtime.SOCKET_EVENTS.typingUpdated, { conversationId: id, users: [] });
             return res.status(200).json({ users: [] });
         }
         typingState.set(id, conversationMap);
@@ -233,7 +230,7 @@ export const getTypingStatus = async (req: Request, res: Response) => {
                 username: user.username,
             })),
         };
-        emitToConversation(id, SOCKET_EVENTS.typingUpdated, payload);
+        realtime.emitToConversation(id, realtime.SOCKET_EVENTS.typingUpdated, payload);
         return res.status(200).json({
             users: payload.users.map((user) => ({
                 _id: user.userId,
@@ -241,6 +238,6 @@ export const getTypingStatus = async (req: Request, res: Response) => {
             })),
         });
     } catch (error) {
-        return sendServerError(res, "getTypingStatus", error);
+        return utils.sendServerError(res, "getTypingStatus", error);
     }
 };

@@ -1,21 +1,13 @@
 import type { Request, Response } from "express";
 import mongoose from "mongoose";
 
-import {
-    isDuplicateKeyError,
-    reqParamId,
-    sendServerError,
-    sendValidationError,
-} from "../lib/utils.ts";
+import * as utils from "../lib/utils.ts";
+import type { TeamDocument } from "../models/team.model.ts";
 import Team from "../models/team.model.ts";
 import TeamMember from "../models/teamMember.model.ts";
 import User from "../models/user.model.ts";
-import type { TeamDocument } from "../models/team.model.ts";
-import {
-    createTeamMemberSchema,
-    updateTeamMemberSchema,
-} from "../schemas/teamMember.schema.ts";
-import { emitToTeam, emitToUser, SOCKET_EVENTS } from "../socket/realtime.ts";
+import * as teamMemberSchema from "../schemas/teamMember.schema.ts";
+import * as realtime from "../socket/realtime.ts";
 
 type TeamRole = "owner" | "admin" | "moderator" | "member";
 
@@ -99,8 +91,8 @@ export const createTeamMember = async (req: Request, res: Response) => {
     try {
         if (!req.user) return res.status(401).json({ message: "Unauthorized" });
 
-        const parsed = createTeamMemberSchema.safeParse(req.body);
-        if (!parsed.success) return sendValidationError(res, parsed.error);
+        const parsed = teamMemberSchema.createTeamMemberSchema.safeParse(req.body);
+        if (!parsed.success) return utils.sendValidationError(res, parsed.error);
 
         const { teamId, userId, identifier, memberRole, status } = parsed.data;
         const teamObjectId = new mongoose.Types.ObjectId(teamId);
@@ -147,17 +139,17 @@ export const createTeamMember = async (req: Request, res: Response) => {
                     spaceName: team.teamName,
                 },
             };
-            emitToTeam(String(populated.teamId), SOCKET_EVENTS.teamMemberCreated, payload);
-            emitToUser(String(populated.userId?._id ?? userObjectId), SOCKET_EVENTS.teamMemberCreated, payload);
+            realtime.emitToTeam(String(populated.teamId), realtime.SOCKET_EVENTS.teamMemberCreated, payload);
+            realtime.emitToUser(String(populated.userId?._id ?? userObjectId), realtime.SOCKET_EVENTS.teamMemberCreated, payload);
         }
         return res.status(201).json(populated);
     } catch (error) {
-        if (isDuplicateKeyError(error)) {
+        if (utils.isDuplicateKeyError(error)) {
             return res.status(409).json({
                 message: "User is already a member of this team",
             });
         }
-        return sendServerError(res, "createTeamMember", error);
+        return utils.sendServerError(res, "createTeamMember", error);
     }
 };
 
@@ -173,20 +165,20 @@ export const listTeamMembers = async (req: Request, res: Response) => {
             .sort({ joinedAt: -1 });
         return res.status(200).json(members);
     } catch (error) {
-        return sendServerError(res, "listTeamMembers", error);
+        return utils.sendServerError(res, "listTeamMembers", error);
     }
 };
 
 export const getTeamMemberById = async (req: Request, res: Response) => {
     try {
-        const id = reqParamId(req);
+        const id = utils.reqParamId(req);
         if (!id || !mongoose.Types.ObjectId.isValid(id)) return badId(res);
 
         const member = await TeamMember.findById(id);
         if (!member) return res.status(404).json({ message: "Team member not found" });
         return res.status(200).json(member);
     } catch (error) {
-        return sendServerError(res, "getTeamMemberById", error);
+        return utils.sendServerError(res, "getTeamMemberById", error);
     }
 };
 
@@ -194,11 +186,11 @@ export const updateTeamMember = async (req: Request, res: Response) => {
     try {
         if (!req.user) return res.status(401).json({ message: "Unauthorized" });
 
-        const id = reqParamId(req);
+        const id = utils.reqParamId(req);
         if (!id || !mongoose.Types.ObjectId.isValid(id)) return badId(res);
 
-        const parsed = updateTeamMemberSchema.safeParse(req.body);
-        if (!parsed.success) return sendValidationError(res, parsed.error);
+        const parsed = teamMemberSchema.updateTeamMemberSchema.safeParse(req.body);
+        if (!parsed.success) return utils.sendValidationError(res, parsed.error);
 
         const member = await TeamMember.findById(id);
         if (!member) return res.status(404).json({ message: "Team member not found" });
@@ -244,12 +236,12 @@ export const updateTeamMember = async (req: Request, res: Response) => {
                     spaceName: team.teamName,
                 },
             };
-            emitToTeam(String(populated.teamId), SOCKET_EVENTS.teamMemberUpdated, payload);
-            emitToUser(String(populated.userId?._id ?? member.userId), SOCKET_EVENTS.teamMemberUpdated, payload);
+            realtime.emitToTeam(String(populated.teamId), realtime.SOCKET_EVENTS.teamMemberUpdated, payload);
+            realtime.emitToUser(String(populated.userId?._id ?? member.userId), realtime.SOCKET_EVENTS.teamMemberUpdated, payload);
         }
         return res.status(200).json(populated);
     } catch (error) {
-        return sendServerError(res, "updateTeamMember", error);
+        return utils.sendServerError(res, "updateTeamMember", error);
     }
 };
 
@@ -257,7 +249,7 @@ export const deleteTeamMember = async (req: Request, res: Response) => {
     try {
         if (!req.user) return res.status(401).json({ message: "Unauthorized" });
 
-        const id = reqParamId(req);
+        const id = utils.reqParamId(req);
         if (!id || !mongoose.Types.ObjectId.isValid(id)) return badId(res);
 
         const member = await TeamMember.findById(id);
@@ -280,10 +272,10 @@ export const deleteTeamMember = async (req: Request, res: Response) => {
         const teamId = String(member.teamId);
         const userId = String(member.userId);
         await TeamMember.findByIdAndDelete(id);
-        emitToTeam(teamId, SOCKET_EVENTS.teamMemberRemoved, { _id: id, teamId, userId });
-        emitToUser(userId, SOCKET_EVENTS.teamMemberRemoved, { _id: id, teamId, userId });
+        realtime.emitToTeam(teamId, realtime.SOCKET_EVENTS.teamMemberRemoved, { _id: id, teamId, userId });
+        realtime.emitToUser(userId, realtime.SOCKET_EVENTS.teamMemberRemoved, { _id: id, teamId, userId });
         return res.status(200).json({ message: "Team member removed" });
     } catch (error) {
-        return sendServerError(res, "deleteTeamMember", error);
+        return utils.sendServerError(res, "deleteTeamMember", error);
     }
 };
