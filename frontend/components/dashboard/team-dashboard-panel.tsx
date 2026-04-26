@@ -9,12 +9,16 @@ import { SidebarTrigger } from "@/components/ui/sidebar"
 import * as teamApi from "@/lib/team-api"
 import { usePresenceRealtime } from "@/lib/use-presence-realtime"
 import { useTeamRealtime } from "@/lib/use-team-realtime"
+import { useRouter } from "next/navigation"
 import * as React from "react"
+
+const SELECTED_TEAM_STORAGE_KEY = "selected-team-id"
 
 type TeamRole = "owner" | "admin" | "moderator" | "member"
 const teamRoles: TeamRole[] = ["owner", "admin", "moderator", "member"]
 
 export function TeamDashboardPanel({ teamId }: { teamId: string }) {
+  const router = useRouter()
   const [selectedTeam, setSelectedTeam] = React.useState<teamApi.Team>()
   const [selectedTeamName, setSelectedTeamName] = React.useState<string>()
   const [currentUserId, setCurrentUserId] = React.useState<string>()
@@ -29,6 +33,7 @@ export function TeamDashboardPanel({ teamId }: { teamId: string }) {
   const [addingMember, setAddingMember] = React.useState(false)
   const [savingPermissions, setSavingPermissions] = React.useState(false)
   const [updatingMemberId, setUpdatingMemberId] = React.useState<string>()
+  const [removingMemberId, setRemovingMemberId] = React.useState<string>()
   const [statusPermissions, setStatusPermissions] = React.useState<
     Record<TeamRole, TeamRole[]>
   >({
@@ -109,6 +114,14 @@ export function TeamDashboardPanel({ teamId }: { teamId: string }) {
     return canManageTarget(targetRole) && roleRank[currentUserRole] > roleRank[targetRole]
   }
 
+  const canRemoveOtherMember = (member: teamApi.TeamMember) => {
+    if (!currentUserRole || !currentUserId || !selectedTeam) return false
+    if (member.userId?._id === currentUserId) return false
+    if (selectedTeam.createdBy === member.userId?._id) return false
+    const targetRole = getTargetRole(member)
+    return canManageTarget(targetRole)
+  }
+
   const handleTeamNameSave = async () => {
     if (!isOwner) return
     setSavingTeamName(true)
@@ -157,6 +170,36 @@ export function TeamDashboardPanel({ teamId }: { teamId: string }) {
       setError(roleError instanceof Error ? roleError.message : "Failed to update member role.")
     } finally {
       setUpdatingMemberId(undefined)
+    }
+  }
+
+  const handleRemoveOrLeaveMember = async (member: teamApi.TeamMember) => {
+    const isSelf = member.userId?._id === currentUserId
+    if (
+      isSelf
+        ? !window.confirm("Leave this team? You will lose access until someone adds you again.")
+        : !window.confirm(
+            `Remove ${member.userId?.username ?? "this member"} from the team? This cannot be undone from here.`
+          )
+    ) {
+      return
+    }
+    setRemovingMemberId(member._id)
+    setError(undefined)
+    setActionMessage(undefined)
+    try {
+      await teamApi.deleteTeamMember(member._id)
+      if (isSelf) {
+        window.localStorage.removeItem(SELECTED_TEAM_STORAGE_KEY)
+        router.push("/personal")
+        return
+      }
+      await loadTeam()
+      setActionMessage("Member removed from the team.")
+    } catch (removeError) {
+      setError(removeError instanceof Error ? removeError.message : "Failed to remove member.")
+    } finally {
+      setRemovingMemberId(undefined)
     }
   }
 
@@ -375,49 +418,86 @@ export function TeamDashboardPanel({ teamId }: { teamId: string }) {
               {filteredMembers.map((member) => (
                 <div
                   key={member._id}
-                  className="flex items-center justify-between rounded-md border bg-background px-3 py-2"
+                  className="flex items-center justify-between gap-2 rounded-md border bg-background px-3 py-2"
                 >
                   <div>
                     <p className="font-medium">{member.userId?.username ?? "Unknown user"}</p>
                     <p className="text-xs text-muted-foreground">{member.userId?.email ?? "-"}</p>
                   </div>
-                  {canEditMember(member) ? (
-                    <div className="flex items-center gap-2">
-                      <select
-                        className="h-8 rounded-md border bg-background px-2 text-xs capitalize"
-                        value={member.memberRole}
-                        disabled={updatingMemberId === member._id}
-                        onChange={(event) =>
-                          handleMemberRoleChange(member._id, event.target.value as TeamRole)
-                        }
-                      >
-                        <option value="owner">Owner</option>
-                        <option value="admin">Admin</option>
-                        <option value="moderator">Moderator</option>
-                        <option value="member">Member</option>
-                      </select>
-                      <select
-                        className="h-8 rounded-md border bg-background px-2 text-xs"
-                        value={member.status}
-                        disabled={updatingMemberId === member._id}
-                        onChange={(event) =>
-                          handleMemberStatusChange(
-                            member._id,
-                            event.target.value as "pending" | "active" | "removed"
-                          )
-                        }
-                      >
-                        <option value="pending">Pending</option>
-                        <option value="active">Active</option>
-                        <option value="removed">Removed</option>
-                      </select>
-                    </div>
-                  ) : (
-                    <div className="flex flex-col items-end gap-0.5 text-xs text-muted-foreground">
-                      <span className="capitalize">{getTargetRole(member)}</span>
-                      <span className="capitalize">{member.status}</span>
-                    </div>
-                  )}
+                  <div className="flex shrink-0 flex-col items-end gap-2 sm:flex-row sm:items-center">
+                    {canEditMember(member) ? (
+                      <div className="flex flex-wrap items-center justify-end gap-2">
+                        <select
+                          className="h-8 rounded-md border bg-background px-2 text-xs capitalize"
+                          value={member.memberRole}
+                          disabled={updatingMemberId === member._id}
+                          onChange={(event) =>
+                            handleMemberRoleChange(member._id, event.target.value as TeamRole)
+                          }
+                        >
+                          <option value="owner">Owner</option>
+                          <option value="admin">Admin</option>
+                          <option value="moderator">Moderator</option>
+                          <option value="member">Member</option>
+                        </select>
+                        <select
+                          className="h-8 rounded-md border bg-background px-2 text-xs"
+                          value={member.status}
+                          disabled={updatingMemberId === member._id}
+                          onChange={(event) =>
+                            handleMemberStatusChange(
+                              member._id,
+                              event.target.value as "pending" | "active" | "removed"
+                            )
+                          }
+                        >
+                          <option value="pending">Pending</option>
+                          <option value="active">Active</option>
+                          <option value="removed">Removed</option>
+                        </select>
+                        {canRemoveOtherMember(member) ? (
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="destructive"
+                            disabled={removingMemberId === member._id}
+                            onClick={() => void handleRemoveOrLeaveMember(member)}
+                          >
+                            {removingMemberId === member._id ? "Removing…" : "Remove"}
+                          </Button>
+                        ) : null}
+                      </div>
+                    ) : (
+                      <div className="flex flex-col items-end gap-2">
+                        <div className="flex flex-col items-end gap-0.5 text-xs text-muted-foreground">
+                          <span className="capitalize">{getTargetRole(member)}</span>
+                          <span className="capitalize">{member.status}</span>
+                        </div>
+                        {member.userId?._id === currentUserId && getTargetRole(member) !== "owner" ? (
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="outline"
+                            className="text-destructive"
+                            disabled={removingMemberId === member._id}
+                            onClick={() => void handleRemoveOrLeaveMember(member)}
+                          >
+                            {removingMemberId === member._id ? "Leaving…" : "Leave team"}
+                          </Button>
+                        ) : canRemoveOtherMember(member) ? (
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="destructive"
+                            disabled={removingMemberId === member._id}
+                            onClick={() => void handleRemoveOrLeaveMember(member)}
+                          >
+                            {removingMemberId === member._id ? "Removing…" : "Remove"}
+                          </Button>
+                        ) : null}
+                      </div>
+                    )}
+                  </div>
                 </div>
               ))}
             </div>

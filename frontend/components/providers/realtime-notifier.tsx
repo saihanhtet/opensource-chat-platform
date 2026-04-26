@@ -36,6 +36,7 @@ type TeamPayload = {
 }
 
 type TeamMemberPayload = {
+  _id?: string
   userId?: string | { _id?: string; username?: string }
   memberRole?: string
   status?: string
@@ -114,13 +115,16 @@ export function RealtimeNotifier() {
       const userId = toUserId(payload?.userId)
       const who = payload?._meta?.fromUsername ?? "Someone"
       const space = payload?._meta?.spaceName ?? "Team"
+      const dedupeId = `teamMemberCreated:${payload?._id ?? userId ?? "unknown"}`
       if (userId === currentUserId) {
         toast("Added to a team", {
+          id: dedupeId,
           description: `${who} added you to ${space}.`,
         })
         return
       }
       toast("Team member added", {
+        id: dedupeId,
         description: `${who} added a new member in ${space}.`,
       })
     }
@@ -129,8 +133,10 @@ export function RealtimeNotifier() {
       const userId = toUserId(payload?.userId)
       const who = payload?._meta?.fromUsername ?? "Someone"
       const space = payload?._meta?.spaceName ?? "Team"
+      const dedupeId = `teamMemberUpdated:${payload?._id ?? userId ?? "unknown"}:${payload?.memberRole ?? ""}:${payload?.status ?? ""}`
       if (userId === currentUserId) {
         toast("Your team access changed", {
+          id: dedupeId,
           description: payload?.memberRole
             ? `${who} changed your role to ${payload.memberRole} in ${space}.`
             : payload?.status
@@ -140,6 +146,7 @@ export function RealtimeNotifier() {
         return
       }
       toast("Team member updated", {
+        id: dedupeId,
         description: `${who} updated a member in ${space}.`,
       })
     }

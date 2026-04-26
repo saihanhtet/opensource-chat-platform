@@ -523,11 +523,51 @@ export function AppSidebar({ onTeamDataChange, ...props }: AppSidebarProps) {
     })()
   }, [pathname, teams, currentUserId, onTeamDataChange])
 
+  const joinedTeamSocketRoomsRef = React.useRef<Set<string>>(new Set())
+  const socketRef = React.useRef(socket)
+  socketRef.current = socket
+
+  const teamIdsSocketKey = React.useMemo(
+    () => JSON.stringify([...teams.map((t) => t.id)].sort()),
+    [teams]
+  )
+
+  React.useEffect(() => {
+    if (!socket) return
+    const next = new Set(JSON.parse(teamIdsSocketKey) as string[])
+    const prev = joinedTeamSocketRoomsRef.current
+    for (const id of prev) {
+      if (!next.has(id)) {
+        socket.emit(SOCKET_EVENTS.roomLeave, { type: "team", id })
+      }
+    }
+    for (const id of next) {
+      if (!prev.has(id)) {
+        socket.emit(SOCKET_EVENTS.roomJoin, { type: "team", id })
+      }
+    }
+    joinedTeamSocketRoomsRef.current = next
+  }, [socket, teamIdsSocketKey])
+
+  React.useEffect(() => {
+    return () => {
+      const s = socketRef.current
+      if (!s) return
+      for (const id of joinedTeamSocketRoomsRef.current) {
+        s.emit(SOCKET_EVENTS.roomLeave, { type: "team", id })
+      }
+      joinedTeamSocketRoomsRef.current = new Set()
+    }
+  }, [])
+
+  const onTeamSocketChange = React.useCallback(async () => {
+    await refreshTeams()
+    await refreshActiveContext()
+  }, [refreshTeams, refreshActiveContext])
+
   useTeamRealtime({
     teamId: effectiveTeamId,
-    onChange: () => {
-      void Promise.all([refreshTeams(), refreshActiveContext()])
-    },
+    onChange: onTeamSocketChange,
   })
   useFriendRealtime(() => {
     if (!effectiveTeamId) void refreshActiveContext()

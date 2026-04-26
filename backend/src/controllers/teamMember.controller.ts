@@ -147,7 +147,6 @@ export const createTeamMember = async (req: Request, res: Response) => {
                 },
             };
             realtime.emitToTeam(String(populated.teamId), realtime.SOCKET_EVENTS.teamMemberCreated, payload);
-            realtime.emitToUser(String(populated.userId?._id ?? userObjectId), realtime.SOCKET_EVENTS.teamMemberCreated, payload);
         }
         return res.status(201).json(populated);
     } catch (error) {
@@ -164,12 +163,53 @@ export const listTeamMembers = async (req: Request, res: Response) => {
     try {
         const { teamId } = req.query;
         const filter: Record<string, unknown> = {};
+        let requestedTeam: TeamDocument | null = null;
         if (typeof teamId === "string" && mongoose.Types.ObjectId.isValid(teamId)) {
-            filter.teamId = new mongoose.Types.ObjectId(teamId);
+            const teamObjectId = new mongoose.Types.ObjectId(teamId);
+            filter.teamId = teamObjectId;
+            requestedTeam = await Team.findById(teamObjectId)
+                .populate("createdBy", "_id username email profilePic status lastSeenAt updatedAt");
         }
-        const members = await TeamMember.find(filter)
+        const members = (await TeamMember.find(filter)
             .populate("userId", "_id username email profilePic status lastSeenAt updatedAt")
-            .sort({ joinedAt: -1 });
+            .sort({ joinedAt: -1 }))
+            .map((member) => member.toObject());
+
+        const ownerId = requestedTeam?.createdBy && typeof requestedTeam.createdBy === "object"
+            ? String((requestedTeam.createdBy as { _id?: mongoose.Types.ObjectId })._id)
+            : undefined;
+        const ownerExists = ownerId
+            ? members.some((member) => String(member.userId?._id) === ownerId)
+            : true;
+
+        if (requestedTeam && !ownerExists && requestedTeam.createdBy) {
+            const ownerUser = requestedTeam.createdBy as unknown as {
+                _id?: mongoose.Types.ObjectId;
+                username?: string;
+                email?: string;
+                profilePic?: string;
+                status?: string;
+                lastSeenAt?: string;
+                updatedAt?: string;
+            };
+            members.unshift({
+                _id: `team-owner-${requestedTeam._id}`,
+                teamId: requestedTeam._id,
+                userId: {
+                    _id: ownerUser?._id,
+                    username: ownerUser?.username ?? "Owner",
+                    email: ownerUser?.email ?? "",
+                    profilePic: ownerUser?.profilePic,
+                    status: ownerUser?.status,
+                    lastSeenAt: ownerUser?.lastSeenAt,
+                    updatedAt: ownerUser?.updatedAt,
+                },
+                memberRole: "owner",
+                status: "active",
+                joinedAt: requestedTeam.createdAt,
+            });
+        }
+
         return res.status(200).json(members);
     } catch (error) {
         return utils.sendServerError(res, "listTeamMembers", error);
@@ -253,7 +293,6 @@ export const updateTeamMember = async (req: Request, res: Response) => {
                 },
             };
             realtime.emitToTeam(String(populated.teamId), realtime.SOCKET_EVENTS.teamMemberUpdated, payload);
-            realtime.emitToUser(String(populated.userId?._id ?? member.userId), realtime.SOCKET_EVENTS.teamMemberUpdated, payload);
         }
         return res.status(200).json(populated);
     } catch (error) {
@@ -293,7 +332,6 @@ export const deleteTeamMember = async (req: Request, res: Response) => {
         );
         await TeamMember.findByIdAndDelete(id);
         realtime.emitToTeam(teamId, realtime.SOCKET_EVENTS.teamMemberRemoved, { _id: id, teamId, userId });
-        realtime.emitToUser(userId, realtime.SOCKET_EVENTS.teamMemberRemoved, { _id: id, teamId, userId });
         return res.status(200).json({ message: "Team member removed" });
     } catch (error) {
         return utils.sendServerError(res, "deleteTeamMember", error);

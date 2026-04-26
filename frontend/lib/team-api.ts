@@ -152,3 +152,21 @@ export async function addTeamMemberByIdentifier(input: {
   })
   return parseJson<TeamMember>(res)
 }
+
+export async function deleteTeamMember(memberId: string): Promise<void> {
+  const res = await fetch(apiUrl(`/api/team-members/${encodeURIComponent(memberId)}`), {
+    method: "DELETE",
+    credentials: "include",
+  })
+  const data: unknown = await res.json().catch(() => ({}))
+  if (!res.ok) {
+    const message =
+      typeof data === "object" &&
+      data !== null &&
+      "message" in data &&
+      typeof (data as { message?: unknown }).message === "string"
+        ? (data as { message: string }).message
+        : "Request failed"
+    throw new Error(message)
+  }
+}

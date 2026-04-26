@@ -105,7 +105,6 @@ export const updateTeam = async (req: Request, res: Response) => {
             },
         };
         realtime.emitToTeam(String(team._id), realtime.SOCKET_EVENTS.teamUpdated, payload);
-        realtime.emitToUser(String(team.createdBy), realtime.SOCKET_EVENTS.teamUpdated, payload);
         return res.status(200).json(team);
     } catch (error) {
         return utils.sendServerError(res, "updateTeam", error);
@@ -129,7 +128,6 @@ export const deleteTeam = async (req: Request, res: Response) => {
         const deletedTeamId = String(team._id);
         await Team.findByIdAndDelete(id);
         realtime.emitToTeam(deletedTeamId, realtime.SOCKET_EVENTS.teamDeleted, { _id: deletedTeamId });
-        realtime.emitToUser(String(team.createdBy), realtime.SOCKET_EVENTS.teamDeleted, { _id: deletedTeamId });
         return res.status(200).json({ message: "Team deleted" });
     } catch (error) {
         return utils.sendServerError(res, "deleteTeam", error);

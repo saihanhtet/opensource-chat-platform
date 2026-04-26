@@ -400,11 +400,21 @@ describe("Team member routes", () => {
             `/api/team-members?teamId=${teamId}`
         );
         expect(res.status).toBe(200);
-        expect(res.body.length).toBe(1);
-        expect(typeof res.body[0].userId).toBe("object");
-        expect(res.body[0].userId._id).toBe(joiner.userId);
-        expect(res.body[0].userId.username).toBeDefined();
-        expect(res.body[0].userId.email).toBeDefined();
+        expect(res.body.length).toBe(2);
+        const ownerMember = res.body.find(
+            (member: { userId?: { _id?: string }; memberRole?: string }) =>
+                member.userId?._id === owner.userId
+        );
+        const joinerMember = res.body.find(
+            (member: { userId?: { _id?: string } }) =>
+                member.userId?._id === joiner.userId
+        );
+        expect(ownerMember).toBeDefined();
+        expect(ownerMember.memberRole).toBe("owner");
+        expect(joinerMember).toBeDefined();
+        expect(typeof joinerMember.userId).toBe("object");
+        expect(joinerMember.userId.username).toBeDefined();
+        expect(joinerMember.userId.email).toBeDefined();
     });
 
     test("owner can add member by username identifier", async () => {
