@@ -20,10 +20,13 @@ export function NavMain({
   users,
   label = "Team Members",
   emptyMessage = "No users in this team yet",
+  dmPathPrefix = "/personal/chat",
 }: {
   users: User[]
   label?: string
   emptyMessage?: string
+  /** e.g. `/personal/chat` or `/team/[teamId]/chat` (no trailing slash) */
+  dmPathPrefix?: string
 }) {
   const pathname = usePathname()
 
@@ -43,10 +46,10 @@ export function NavMain({
             <sidebar.SidebarMenuButton
               asChild
               size="lg"
-              isActive={pathname === `/chat/${user.username}`}
+              isActive={pathname === `${dmPathPrefix}/${encodeURIComponent(user.username)}`}
               className="data-[state=open]:bg-sidebar-accent data-[state=open]:text-sidebar-accent-foreground"
             >
-              <Link href={`/chat/${user.username}`}>
+              <Link href={`${dmPathPrefix}/${encodeURIComponent(user.username)}`}>
                 <Avatar className="h-8 w-8 rounded-lg">
                   <AvatarImage src={user.profilePic as string} alt={user.username} />
                   <AvatarFallback className="rounded-lg">OC</AvatarFallback>

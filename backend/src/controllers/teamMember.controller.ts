@@ -1,6 +1,10 @@
 import type { Request, Response } from "express";
 import mongoose from "mongoose";
 
+import {
+    addUserToAllTeamChannels,
+    removeUserFromAllTeamChannels,
+} from "../lib/teamParticipants.ts";
 import * as utils from "../lib/utils.ts";
 import type { TeamDocument } from "../models/team.model.ts";
 import Team from "../models/team.model.ts";
@@ -128,6 +132,9 @@ export const createTeamMember = async (req: Request, res: Response) => {
             memberRole: joiningSelf ? "member" : (memberRole ?? "member"),
             status: status ?? "active",
         });
+        if (member.status === "active") {
+            await addUserToAllTeamChannels(teamObjectId, userObjectId);
+        }
         const populated = await TeamMember.findById(member._id)
             .populate("userId", "_id username email profilePic status lastSeenAt updatedAt");
         if (populated) {
@@ -223,8 +230,17 @@ export const updateTeamMember = async (req: Request, res: Response) => {
             }
         }
 
+        const prevStatus = member.status;
         Object.assign(member, parsed.data);
         await member.save();
+
+        const nowActive = member.status === "active";
+        const wasActive = prevStatus === "active";
+        if (nowActive && !wasActive) {
+            await addUserToAllTeamChannels(member.teamId, member.userId);
+        } else if (!nowActive && wasActive) {
+            await removeUserFromAllTeamChannels(member.teamId, member.userId);
+        }
         const populated = await TeamMember.findById(member._id)
             .populate("userId", "_id username email profilePic status lastSeenAt updatedAt");
         if (populated) {
@@ -271,6 +287,10 @@ export const deleteTeamMember = async (req: Request, res: Response) => {
 
         const teamId = String(member.teamId);
         const userId = String(member.userId);
+        await removeUserFromAllTeamChannels(
+            member.teamId as mongoose.Types.ObjectId,
+            member.userId as mongoose.Types.ObjectId
+        );
         await TeamMember.findByIdAndDelete(id);
         realtime.emitToTeam(teamId, realtime.SOCKET_EVENTS.teamMemberRemoved, { _id: id, teamId, userId });
         realtime.emitToUser(userId, realtime.SOCKET_EVENTS.teamMemberRemoved, { _id: id, teamId, userId });

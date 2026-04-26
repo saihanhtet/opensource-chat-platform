@@ -12,6 +12,12 @@ const conversationSchema = new mongoose.Schema(
             type: mongoose.Schema.Types.ObjectId,
             ref: "Team",
         },
+        name: {
+            type: String,
+            trim: true,
+            default: "",
+            maxlength: 120,
+        },
         participantIds: [
             {
                 type: mongoose.Schema.Types.ObjectId,

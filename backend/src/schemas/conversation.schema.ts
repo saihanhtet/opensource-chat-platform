@@ -4,6 +4,7 @@ import { objectIdString } from "./objectId.schema.ts";
 export const createConversationSchema = z.object({
     type: z.enum(["direct", "team"]),
     teamId: objectIdString.optional(),
+    name: z.string().trim().max(120).optional(),
     participantIds: z.array(objectIdString).min(1),
     lastMessage: z.string().max(5000).optional(),
 });
@@ -11,6 +12,7 @@ export const createConversationSchema = z.object({
 export const updateConversationSchema = z.object({
     type: z.enum(["direct", "team"]).optional(),
     teamId: objectIdString.optional().nullable(),
+    name: z.string().trim().max(120).optional().nullable(),
     participantIds: z.array(objectIdString).min(1).optional(),
     lastMessage: z.string().max(5000).optional(),
 });

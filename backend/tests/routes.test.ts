@@ -809,6 +809,86 @@ describe("Cross-route flow", () => {
         });
         expect(file.status).toBe(201);
     });
+
+    test("team channel API: owner creates, members list and message, sync on new member", async () => {
+        const owner = await signUp(app, uniqueUser());
+        const member = await signUp(app, uniqueUser());
+        const joiner = await signUp(app, uniqueUser());
+
+        const team = await owner.agent.post("/api/teams").send({ teamName: "ChannelTeam" });
+        expect(team.status).toBe(201);
+        const teamId = team.body._id;
+
+        await member.agent.post("/api/team-members").send({
+            teamId,
+            userId: member.userId,
+        });
+
+        const forbiddenCreate = await member.agent.post(`/api/teams/${teamId}/channels`).send({
+            name: "secret",
+        });
+        expect(forbiddenCreate.status).toBe(403);
+
+        const createCh = await owner.agent.post(`/api/teams/${teamId}/channels`).send({
+            name: "announcements",
+        });
+        expect(createCh.status).toBe(201);
+        const channelId = createCh.body._id;
+        expect(createCh.body.type).toBe("team");
+        expect(createCh.body.name).toBe("announcements");
+        expect(createCh.body.participantIds).toEqual(
+            expect.arrayContaining([owner.userId, member.userId])
+        );
+
+        const dup = await owner.agent.post(`/api/teams/${teamId}/channels`).send({
+            name: "announcements",
+        });
+        expect(dup.status).toBe(409);
+
+        const listMember = await member.agent.get(`/api/teams/${teamId}/channels`);
+        expect(listMember.status).toBe(200);
+        expect(Array.isArray(listMember.body)).toBe(true);
+        expect(listMember.body.some((c: { _id: string }) => c._id === channelId)).toBe(true);
+
+        const msg = await member.agent.post("/api/messages").send({
+            conversationId: channelId,
+            content: "hello channel",
+        });
+        expect(msg.status).toBe(201);
+        expect(msg.body.senderUsername).toBeDefined();
+
+        const listed = await member.agent.get("/api/messages").query({ conversationId: channelId });
+        expect(listed.status).toBe(200);
+        expect(Array.isArray(listed.body)).toBe(true);
+        expect(listed.body[0]?.senderUsername).toBeDefined();
+
+        await joiner.agent.post("/api/team-members").send({
+            teamId,
+            userId: joiner.userId,
+        });
+
+        const listJoiner = await joiner.agent.get(`/api/teams/${teamId}/channels`);
+        expect(listJoiner.status).toBe(200);
+        expect(listJoiner.body.some((c: { _id: string }) => c._id === channelId)).toBe(true);
+
+        const msgJoiner = await joiner.agent.post("/api/messages").send({
+            conversationId: channelId,
+            content: "joined",
+        });
+        expect(msgJoiner.status).toBe(201);
+
+        const memberRow = (await member.agent.get("/api/team-members").query({ teamId })).body.find(
+            (m: { userId: { _id: string } }) => m.userId?._id === member.userId
+        );
+        expect(memberRow).toBeDefined();
+        await owner.agent.put(`/api/team-members/${memberRow._id}`).send({ status: "pending" });
+
+        const blocked = await member.agent.post("/api/messages").send({
+            conversationId: channelId,
+            content: "nope",
+        });
+        expect(blocked.status).toBe(403);
+    });
 });
 
 describe("Socket realtime", () => {
@@ -824,12 +904,12 @@ describe("Socket realtime", () => {
         try {
             const receiverSignup = await request(server).post("/api/auth/sign-up").send(uniqueUser());
             expect(receiverSignup.status).toBe(201);
-            const receiverCookie = receiverSignup.headers["set-cookie"] as string[] | undefined;
+            const receiverCookie = receiverSignup.headers["set-cookie"] as unknown as string[] | undefined;
             expect(receiverCookie?.length).toBeGreaterThan(0);
 
             const senderSignup = await request(server).post("/api/auth/sign-up").send(uniqueUser());
             expect(senderSignup.status).toBe(201);
-            const senderCookie = senderSignup.headers["set-cookie"] as string[] | undefined;
+            const senderCookie = senderSignup.headers["set-cookie"] as unknown as string[] | undefined;
             expect(senderCookie?.length).toBeGreaterThan(0);
 
             const socket = socketClient(baseUrl, {

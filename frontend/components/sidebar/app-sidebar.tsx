@@ -1,9 +1,10 @@
 "use client"
 
-import { usePathname } from "next/navigation"
+import { usePathname, useRouter } from "next/navigation"
 import * as React from "react"
 
 import { NavMain } from "@/components/sidebar/nav-main"
+import { NavTeamChannels } from "@/components/sidebar/nav-team-channels"
 import { NavUser } from "@/components/sidebar/nav-user"
 import { TeamSwitcher } from "@/components/sidebar/team-switcher"
 import { Button } from "@/components/ui/button"
@@ -19,15 +20,15 @@ import { useFriendRealtime } from "@/lib/use-friend-realtime"
 import { usePresenceRealtime } from "@/lib/use-presence-realtime"
 import { useSocket } from "@/lib/use-socket"
 import { useTeamRealtime } from "@/lib/use-team-realtime"
-import * as remixicon from "@remixicon/react"
+import * as remixIconReact from "@remixicon/react"
 
 const SELECTED_TEAM_KEY = "selected-team-id"
 
 function teamLogo(index: number) {
   const logos = [
-    <remixicon.RiGalleryLine key="gallery" />,
-    <remixicon.RiPulseLine key="pulse" />,
-    <remixicon.RiCommandLine key="command" />,
+    <remixIconReact.RiGalleryLine key="gallery" />,
+    <remixIconReact.RiPulseLine key="pulse" />,
+    <remixIconReact.RiCommandLine key="command" />,
   ]
   return logos[index % logos.length]
 }
@@ -49,6 +50,7 @@ type AppSidebarProps = React.ComponentProps<typeof sidebar.Sidebar> & {
 
 export function AppSidebar({ onTeamDataChange, ...props }: AppSidebarProps) {
   const pathname = usePathname()
+  const router = useRouter()
   const socket = useSocket()
   const [theme, setTheme] = React.useState<"light" | "dark">("light")
   const [loading, setLoading] = React.useState(true)
@@ -73,6 +75,12 @@ export function AppSidebar({ onTeamDataChange, ...props }: AppSidebarProps) {
     { _id: string; sender: friendApi.FriendRequestUser }[]
   >([])
   const [unreadByUserId, setUnreadByUserId] = React.useState<Record<string, number>>({})
+
+  const teamFromPath = pathname?.match(/^\/team\/([^/]+)/)?.[1]
+  const effectiveTeamId = pathname?.startsWith("/personal")
+    ? undefined
+    : (teamFromPath ?? activeTeamId)
+  const dmChatPathPrefix = effectiveTeamId ? `/team/${effectiveTeamId}/chat` : "/personal/chat"
 
   const loadPersonalData = React.useCallback(
     async (meId: string) => {
@@ -127,21 +135,39 @@ export function AppSidebar({ onTeamDataChange, ...props }: AppSidebarProps) {
     [onTeamDataChange]
   )
 
+  const refreshTeams = React.useCallback(async () => {
+    const fetchedTeams = await teamApi.getTeams()
+    setTeams(
+      fetchedTeams
+        .filter((team) => team.teamType !== "personal")
+        .map((team, index) => ({
+          id: team._id,
+          name: team.teamName,
+          logo: teamLogo(index),
+          plan: team.description || "Team",
+          team,
+        }))
+    )
+  }, [])
+
   const refreshActiveContext = React.useCallback(async () => {
     if (!currentUserId) return
-    if (!activeTeamId) {
+    const pathTeam =
+      typeof window !== "undefined" ? window.location.pathname.match(/^\/team\/([^/]+)/)?.[1] : undefined
+    const targetTeamId = pathTeam ?? activeTeamId
+    if (!targetTeamId) {
       await loadPersonalData(currentUserId)
       return
     }
-    const selectedTeam = teams.find((team) => team.id === activeTeamId)
-    const fetchedMembers = await teamApi.getTeamMembers(activeTeamId)
+    const selectedTeam = teams.find((team) => team.id === targetTeamId)
+    const fetchedMembers = await teamApi.getTeamMembers(targetTeamId)
     setMembers(fetchedMembers)
     const membership = fetchedMembers.find((member) => member.userId?._id === currentUserId)
     const currentUserRole = selectedTeam?.team.createdBy === currentUserId
       ? "owner"
       : membership?.memberRole
     onTeamDataChange?.({
-      selectedTeamId: activeTeamId,
+      selectedTeamId: targetTeamId,
       selectedTeamName: selectedTeam?.name,
       selectedTeam: selectedTeam?.team,
       currentUserId,
@@ -242,9 +268,10 @@ export function AppSidebar({ onTeamDataChange, ...props }: AppSidebarProps) {
     return () => {
       mounted = false
     }
-  }, [onTeamDataChange, loadPersonalData])
+  }, [onTeamDataChange, loadPersonalData, refreshTeams])
 
   const handleTeamChange = async (teamId: string) => {
+    router.push(`/team/${teamId}`)
     setActiveTeamId(teamId)
     window.localStorage.setItem(SELECTED_TEAM_KEY, teamId)
     setLoading(true)
@@ -281,6 +308,7 @@ export function AppSidebar({ onTeamDataChange, ...props }: AppSidebarProps) {
   }
 
   const handlePersonalSpaceSelect = () => {
+    router.push("/personal")
     setActiveTeamId(undefined)
     window.localStorage.removeItem(SELECTED_TEAM_KEY)
     setError(undefined)
@@ -370,11 +398,13 @@ export function AppSidebar({ onTeamDataChange, ...props }: AppSidebarProps) {
     .filter((member) => member.id !== currentUserId)
 
   React.useEffect(() => {
-    const currentUsername = pathname?.startsWith("/chat/")
-      ? decodeURIComponent(pathname.replace("/chat/", ""))
-      : undefined
-    if (!currentUsername) return
-    const activeUser = mappedUsers.find((member) => member.username === currentUsername)
+    let openDmUsername: string | undefined
+    const personalMatch = pathname?.match(/^\/personal\/chat\/([^/]+)$/)
+    const teamDmMatch = pathname?.match(/^\/team\/[^/]+\/chat\/([^/]+)$/)
+    if (personalMatch?.[1]) openDmUsername = decodeURIComponent(personalMatch[1])
+    else if (teamDmMatch?.[1]) openDmUsername = decodeURIComponent(teamDmMatch[1])
+    if (!openDmUsername) return
+    const activeUser = mappedUsers.find((member) => member.username === openDmUsername)
     if (!activeUser) return
     setUnreadByUserId((prev) => {
       if (!prev[activeUser.id]) return prev
@@ -407,14 +437,26 @@ export function AppSidebar({ onTeamDataChange, ...props }: AppSidebarProps) {
     if (!socket) return
     const onMessageNew = (payload: {
       senderId?: string
+      conversationId?: string
       _meta?: { fromUserId?: string; fromUsername?: string }
     }) => {
       const senderId = payload?._meta?.fromUserId ?? payload?.senderId
       if (!senderId || senderId === currentUserId) return
       const sender = mappedUsers.find((member) => member.id === senderId)
       if (!sender) return
-      const inSameChat = pathname === `/chat/${sender.username}`
-      if (inSameChat) return
+      let openDmUsername: string | undefined
+      const personalMatch = pathname?.match(/^\/personal\/chat\/([^/]+)$/)
+      const teamDmMatch = pathname?.match(/^\/team\/[^/]+\/chat\/([^/]+)$/)
+      if (personalMatch?.[1]) openDmUsername = decodeURIComponent(personalMatch[1])
+      else if (teamDmMatch?.[1]) openDmUsername = decodeURIComponent(teamDmMatch[1])
+      const inSameDm = openDmUsername && sender.username === openDmUsername
+      const channelMatch = pathname?.match(/^\/team\/[^/]+\/c\/([^/]+)$/)
+      const openChannelId = channelMatch?.[1]
+      const inSameChannel =
+        openChannelId &&
+        payload.conversationId &&
+        String(payload.conversationId) === openChannelId
+      if (inSameDm || inSameChannel) return
       setUnreadByUserId((prev) => ({
         ...prev,
         [senderId]: (prev[senderId] ?? 0) + 1,
@@ -426,14 +468,69 @@ export function AppSidebar({ onTeamDataChange, ...props }: AppSidebarProps) {
     }
   }, [currentUserId, mappedUsers, pathname, socket])
 
+  React.useEffect(() => {
+    if (!pathname?.startsWith("/personal")) return
+    setActiveTeamId(undefined)
+    window.localStorage.removeItem(SELECTED_TEAM_KEY)
+    if (currentUserId) void loadPersonalData(currentUserId)
+  }, [pathname, currentUserId, loadPersonalData])
+
+  const teamPathSyncKey = React.useRef<string | null>(null)
+  React.useEffect(() => {
+    if (!currentUserId) return
+    const m = pathname?.match(/^\/team\/([^/]+)/)
+    if (!m?.[1]) {
+      teamPathSyncKey.current = null
+      return
+    }
+    const id = m[1]
+    const teamMetaReady = teams.some((team) => team.id === id)
+    const syncKey = `${id}:${teamMetaReady ? "1" : "0"}`
+    if (teamPathSyncKey.current === syncKey) return
+    teamPathSyncKey.current = syncKey
+    setActiveTeamId(id)
+    window.localStorage.setItem(SELECTED_TEAM_KEY, id)
+    setLoading(true)
+    setError(undefined)
+    onTeamDataChange?.({ selectedTeamId: id, members: [], loading: true })
+    void (async () => {
+      try {
+        const fetchedMembers = await teamApi.getTeamMembers(id)
+        const selectedTeam = teams.find((team) => team.id === id)
+        const membership = fetchedMembers.find((member) => member.userId?._id === currentUserId)
+        const currentUserRole = selectedTeam?.team.createdBy === currentUserId
+          ? "owner"
+          : membership?.memberRole
+        setMembers(fetchedMembers)
+        onTeamDataChange?.({
+          selectedTeamId: id,
+          members: fetchedMembers,
+          selectedTeamName: selectedTeam?.name,
+          selectedTeam: selectedTeam?.team,
+          currentUserId,
+          currentUserRole,
+          loading: false,
+        })
+      } catch (fetchError) {
+        const message =
+          fetchError instanceof Error ? fetchError.message : "Failed to load team members."
+        setError(message)
+        setMembers([])
+        onTeamDataChange?.({ selectedTeamId: id, members: [], error: message, loading: false })
+      } finally {
+        setLoading(false)
+      }
+    })()
+  }, [pathname, teams, currentUserId, onTeamDataChange])
+
   useTeamRealtime({
-    teamId: activeTeamId,
+    teamId: effectiveTeamId,
     onChange: () => {
-      void refreshActiveContext()
+      void Promise.all([refreshTeams(), refreshActiveContext()])
     },
   })
   useFriendRealtime(() => {
-    if (!activeTeamId) void refreshActiveContext()
+    if (!effectiveTeamId) void refreshActiveContext()
   })
   usePresenceRealtime((payload) => {
     setMembers((prev) =>
@@ -458,14 +555,14 @@ export function AppSidebar({ onTeamDataChange, ...props }: AppSidebarProps) {
         <sidebar.SidebarHeader>
           <TeamSwitcher
             teams={teams}
-            activeTeamId={activeTeamId}
+            activeTeamId={teamFromPath ?? activeTeamId}
             onTeamChange={handleTeamChange}
             onPersonalSpaceSelect={handlePersonalSpaceSelect}
             onAddTeam={handleAddTeam}
           />
         </sidebar.SidebarHeader>
         <sidebar.SidebarContent>
-          {!activeTeamId ? (
+          {!effectiveTeamId ? (
             <div className="px-4 py-2">
               <Label htmlFor="friend-username" className="mb-1 text-xs">
                 Add Friend (username)
@@ -508,11 +605,20 @@ export function AppSidebar({ onTeamDataChange, ...props }: AppSidebarProps) {
               ) : null}
             </div>
           ) : null}
+          {effectiveTeamId ? (
+            <NavTeamChannels
+              teamId={effectiveTeamId}
+              isOwner={
+                teams.find((team) => team.id === effectiveTeamId)?.team.createdBy === currentUserId
+              }
+            />
+          ) : null}
           <NavMain
             users={mappedUsers}
-            label={activeTeamId ? "Team Members" : "Personal Contacts"}
+            dmPathPrefix={dmChatPathPrefix}
+            label={effectiveTeamId ? "Team Members" : "Personal Contacts"}
             emptyMessage={
-              activeTeamId
+              effectiveTeamId
                 ? "No users in this team yet"
                 : "No friends yet. Add a friend to start private chat."
             }

@@ -2,13 +2,18 @@ import type { Request, Response } from "express";
 import { unlink } from "fs/promises";
 import mongoose from "mongoose";
 
+// lib
 import cloud from "../lib/cloud.ts";
+import { withSenderUsernames } from "../lib/messageSender.ts";
 import * as utils from "../lib/utils.ts";
+// models
 import Conversation from "../models/conversation.model.ts";
 import Message from "../models/message.model.ts";
 import Team from "../models/team.model.ts";
 import UploadedFile from "../models/uploadedFile.model.ts";
+// schemas
 import * as uploadedFileSchema from "../schemas/uploadedFile.schema.ts";
+// socket
 import * as realtime from "../socket/realtime.ts";
 
 const badId = (res: Response) =>
@@ -36,9 +41,14 @@ const emitToConversationParticipants = async (
 };
 
 const getSpaceLabel = async (conversationId: mongoose.Types.ObjectId) => {
-    const conversation = await Conversation.findById(conversationId).select("type teamId");
+    const conversation = await Conversation.findById(conversationId).select("type teamId name");
     if (!conversation) return "Personal";
     if (conversation.type === "team" && conversation.teamId) {
+        const channelName =
+            typeof conversation.name === "string" && conversation.name.trim()
+                ? `#${conversation.name.trim()}`
+                : "";
+        if (channelName) return channelName;
         const team = await Team.findById(conversation.teamId).select("teamName");
         return team?.teamName ?? "Team";
     }
@@ -114,8 +124,9 @@ export const uploadChatFile = async (req: Request, res: Response) => {
             content: (content ?? "").trim(),
             fileUrl: uploaded.secure_url,
         });
+        const [messageOut] = await withSenderUsernames([message.toObject()]);
         const messagePayload = {
-            ...message.toObject(),
+            ...messageOut,
             _meta: {
                 fromUserId: String(me),
                 fromUsername: req.user.username,
@@ -140,7 +151,7 @@ export const uploadChatFile = async (req: Request, res: Response) => {
 
         return res.status(201).json({
             file: fileDoc,
-            message,
+            message: messageOut,
         });
     } catch (error) {
         return utils.sendServerError(res, "uploadChatFile", error);

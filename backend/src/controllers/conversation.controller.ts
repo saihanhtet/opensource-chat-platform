@@ -1,6 +1,7 @@
 import type { Request, Response } from "express";
 import mongoose from "mongoose";
 
+import { getActiveTeamParticipantIds, userCanAccessTeam } from "../lib/teamParticipants.ts";
 import * as utils from "../lib/utils.ts";
 import Conversation from "../models/conversation.model.ts";
 import User from "../models/user.model.ts";
@@ -35,11 +36,30 @@ export const createConversation = async (req: Request, res: Response) => {
             });
         }
 
+        if (parsed.data.type === "team") {
+            if (!parsed.data.teamId) {
+                return res.status(400).json({ message: "teamId is required for team conversations" });
+            }
+            const teamOid = new mongoose.Types.ObjectId(parsed.data.teamId);
+            if (!(await userCanAccessTeam(teamOid, me))) {
+                return res.status(403).json({ message: "Forbidden" });
+            }
+            const allowed = await getActiveTeamParticipantIds(teamOid);
+            const allowedSet = new Set(allowed.map((id) => id.toString()));
+            const allAllowed = participantObjectIds.every((p) => allowedSet.has(p.toString()));
+            if (!allAllowed) {
+                return res.status(400).json({
+                    message: "All participants must be active members of the team (including the owner)",
+                });
+            }
+        }
+
         const doc = await Conversation.create({
             type: parsed.data.type,
             teamId: parsed.data.teamId
                 ? new mongoose.Types.ObjectId(parsed.data.teamId)
                 : undefined,
+            name: parsed.data.name?.trim() ?? "",
             participantIds: participantObjectIds,
             lastMessage: parsed.data.lastMessage ?? "",
         });
@@ -107,6 +127,9 @@ export const updateConversation = async (req: Request, res: Response) => {
             conversation.teamId = parsed.data.teamId
                 ? new mongoose.Types.ObjectId(parsed.data.teamId)
                 : undefined;
+        }
+        if (parsed.data.name !== undefined) {
+            conversation.name = parsed.data.name === null ? "" : parsed.data.name.trim();
         }
         if (parsed.data.participantIds) {
             const next = parsed.data.participantIds.map(

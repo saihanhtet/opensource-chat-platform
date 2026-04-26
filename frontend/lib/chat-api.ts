@@ -7,6 +7,7 @@ export type Conversation = {
   _id: string
   type: "direct" | "team"
   teamId?: string
+  name?: string
   participantIds: string[]
   lastMessage: string
 }
@@ -15,6 +16,7 @@ export type ChatMessage = {
   _id: string
   conversationId: string
   senderId: string
+  senderUsername?: string
   content: string
   fileUrl?: string
   timestamp: string
@@ -57,6 +59,35 @@ export async function getUserByUsername(username: string): Promise<ChatUser> {
     cache: "no-store",
   })
   return parseJson<ChatUser>(res)
+}
+
+export async function getConversationById(conversationId: string): Promise<Conversation> {
+  const res = await fetch(apiUrl(`/api/conversations/${encodeURIComponent(conversationId)}`), {
+    credentials: "include",
+    cache: "no-store",
+  })
+  return parseJson<Conversation>(res)
+}
+
+export async function listTeamChannels(teamId: string): Promise<Conversation[]> {
+  const res = await fetch(apiUrl(`/api/teams/${encodeURIComponent(teamId)}/channels`), {
+    credentials: "include",
+    cache: "no-store",
+  })
+  return parseJson<Conversation[]>(res)
+}
+
+export async function createTeamChannel(
+  teamId: string,
+  name: string
+): Promise<Conversation> {
+  const res = await fetch(apiUrl(`/api/teams/${encodeURIComponent(teamId)}/channels`), {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    credentials: "include",
+    body: JSON.stringify({ name }),
+  })
+  return parseJson<Conversation>(res)
 }
 
 export async function ensureDirectConversation(targetUsername: string): Promise<{

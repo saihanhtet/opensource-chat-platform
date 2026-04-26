@@ -144,6 +144,7 @@ async function main() {
     const teamConv = await Conversation.create({
         type: "team",
         teamId: team._id,
+        name: "general",
         participantIds: [alice._id, bob._id, carol._id],
         lastMessage: "",
     });

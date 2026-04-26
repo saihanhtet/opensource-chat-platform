@@ -16,6 +16,7 @@ export const SOCKET_EVENTS = {
   teamMemberCreated: "teamMember:created",
   teamMemberUpdated: "teamMember:updated",
   teamMemberRemoved: "teamMember:removed",
+  teamChannelCreated: "teamChannel:created",
   presenceUpdated: "presence:updated",
 } as const
 

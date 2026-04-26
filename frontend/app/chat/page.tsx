@@ -1,26 +1,5 @@
-import Link from "next/link"
-import { Separator } from "@/components/ui/separator"
-import { SidebarTrigger } from "@/components/ui/sidebar"
+import { redirect } from "next/navigation"
 
-export default function ChatIndexPage() {
-  return (
-    <>
-      <header className="flex h-14 shrink-0 items-center gap-2 border-b px-4">
-        <SidebarTrigger className="-ml-1" />
-        <Separator orientation="vertical" className="mr-2 h-4" />
-        <h1 className="font-semibold">Chats</h1>
-        <span className="ml-2 rounded-full border px-2 py-0.5 text-xs text-muted-foreground">
-          No Team (Personal)
-        </span>
-      </header>
-      <div className="flex min-h-0 flex-1 flex-col p-6">
-        <p className="text-sm text-muted-foreground">
-          Select a teammate from the sidebar to open a direct message.
-        </p>
-        <Link href="/" className="mt-4 text-sm underline">
-          Go to dashboard
-        </Link>
-      </div>
-    </>
-  )
+export default function ChatIndexRedirect() {
+  redirect("/personal")
 }

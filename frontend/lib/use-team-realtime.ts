@@ -16,6 +16,7 @@ export function useTeamRealtime(options: { teamId?: string; onChange?: () => voi
     socket.on(SOCKET_EVENTS.teamMemberCreated, onChange)
     socket.on(SOCKET_EVENTS.teamMemberUpdated, onChange)
     socket.on(SOCKET_EVENTS.teamMemberRemoved, onChange)
+    socket.on(SOCKET_EVENTS.teamChannelCreated, onChange)
     return () => {
       socket.off(SOCKET_EVENTS.teamCreated, onChange)
       socket.off(SOCKET_EVENTS.teamUpdated, onChange)
@@ -23,6 +24,7 @@ export function useTeamRealtime(options: { teamId?: string; onChange?: () => voi
       socket.off(SOCKET_EVENTS.teamMemberCreated, onChange)
       socket.off(SOCKET_EVENTS.teamMemberUpdated, onChange)
       socket.off(SOCKET_EVENTS.teamMemberRemoved, onChange)
+      socket.off(SOCKET_EVENTS.teamChannelCreated, onChange)
     }
   }, [onChange, socket])
 
