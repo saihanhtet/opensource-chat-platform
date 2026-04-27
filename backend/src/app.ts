@@ -1,6 +1,7 @@
 import express from "express";
 import cookieParser from "cookie-parser";
 import cors from "cors";
+import path from "path";
 import { isAllowedOrigin, parseAllowedOrigins } from "./lib/cors.ts";
 
 import authRoute from "./routes/auth.route.ts";
@@ -28,6 +29,7 @@ export const createApp = () => {
     );
     app.use(express.json());
     app.use(cookieParser());
+    app.use("/uploads", express.static(path.join(import.meta.dir, "../uploads")));
 
     app.use("/api/auth", authRoute);
     app.use("/api/ai", aiRoute);

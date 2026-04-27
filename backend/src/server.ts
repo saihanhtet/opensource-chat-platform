@@ -6,7 +6,7 @@ import { createApp } from "./app.ts";
 import { connectDatabase } from "./lib/database.ts";
 import { initSocketServer } from "./socket/server.ts";
 
-dotenv.config();
+dotenv.config({ path: path.join(import.meta.dir, "../.env") });
 
 const frontendDir = path.join(import.meta.dir, "../../frontend");
 

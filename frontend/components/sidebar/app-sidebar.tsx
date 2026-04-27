@@ -67,6 +67,7 @@ export function AppSidebar({ onTeamDataChange, ...props }: AppSidebarProps) {
   const [activeTeamId, setActiveTeamId] = React.useState<string>()
   const [members, setMembers] = React.useState<teamApi.TeamMember[]>([])
   const [createTeamOpen, setCreateTeamOpen] = React.useState(false)
+  const [addFriendOpen, setAddFriendOpen] = React.useState(false)
   const [creatingTeam, setCreatingTeam] = React.useState(false)
   const [newTeamName, setNewTeamName] = React.useState("")
   const [newTeamDescription, setNewTeamDescription] = React.useState("")
@@ -366,6 +367,7 @@ export function AppSidebar({ onTeamDataChange, ...props }: AppSidebarProps) {
     try {
       await friendApi.createFriendRequestByUsername(friendUsername.trim())
       setFriendUsername("")
+      setAddFriendOpen(false)
     } catch (requestError) {
       setError(requestError instanceof Error ? requestError.message : "Failed to send friend request.")
     }
@@ -603,47 +605,20 @@ export function AppSidebar({ onTeamDataChange, ...props }: AppSidebarProps) {
         </sidebar.SidebarHeader>
         <sidebar.SidebarContent>
           {!effectiveTeamId ? (
-            <div className="px-4 py-2">
-              <Label htmlFor="friend-username" className="mb-1 text-xs">
-                Add Friend (username)
-              </Label>
-              <div className="flex gap-2">
-                <Input
-                  id="friend-username"
-                  value={friendUsername}
-                  onChange={(event) => setFriendUsername(event.target.value)}
-                  placeholder="username"
-                />
-                <Button size="sm" onClick={handleAddFriend} disabled={!friendUsername.trim()}>
-                  Add
-                </Button>
-              </div>
-              {friendRequests.length > 0 ? (
-                <div className="mt-3 space-y-2">
-                  <p className="text-xs text-muted-foreground">Incoming Requests</p>
-                  {friendRequests.map((request) => (
-                    <div key={request._id} className="rounded-md border p-2">
-                      <p className="text-xs">{request.sender.username}</p>
-                      <div className="mt-2 flex gap-2">
-                        <Button
-                          size="xs"
-                          onClick={() => handleIncomingRequest(request._id, "accepted")}
-                        >
-                          Accept
-                        </Button>
-                        <Button
-                          size="xs"
-                          variant="outline"
-                          onClick={() => handleIncomingRequest(request._id, "rejected")}
-                        >
-                          Reject
-                        </Button>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              ) : null}
-            </div>
+            <sidebar.SidebarGroup className="px-2">
+              <sidebar.SidebarMenu>
+                <sidebar.SidebarMenuItem>
+                  <sidebar.SidebarMenuButton
+                    size="lg"
+                    tooltip="Add friend"
+                    onClick={() => setAddFriendOpen(true)}
+                  >
+                    <remixIconReact.RiUserAddLine />
+                    <span className="group-data-[collapsible=icon]:hidden">Add Friend</span>
+                  </sidebar.SidebarMenuButton>
+                </sidebar.SidebarMenuItem>
+              </sidebar.SidebarMenu>
+            </sidebar.SidebarGroup>
           ) : null}
           {effectiveTeamId ? (
             <NavTeamChannels
@@ -707,6 +682,52 @@ export function AppSidebar({ onTeamDataChange, ...props }: AppSidebarProps) {
               </Button>
             </sheet.SheetFooter>
           </form>
+        </sheet.SheetContent>
+      </sheet.Sheet>
+      <sheet.Sheet open={addFriendOpen} onOpenChange={setAddFriendOpen}>
+        <sheet.SheetContent side="right">
+          <sheet.SheetHeader>
+            <sheet.SheetTitle>Add Friend</sheet.SheetTitle>
+            <sheet.SheetDescription>Send a friend request using username.</sheet.SheetDescription>
+          </sheet.SheetHeader>
+          <div className="space-y-4 px-4 py-2">
+            <div className="space-y-1">
+              <Label htmlFor="friend-username">Username</Label>
+              <div className="flex gap-2">
+                <Input
+                  id="friend-username"
+                  value={friendUsername}
+                  onChange={(event) => setFriendUsername(event.target.value)}
+                  placeholder="username"
+                />
+                <Button size="sm" onClick={handleAddFriend} disabled={!friendUsername.trim()}>
+                  Add
+                </Button>
+              </div>
+            </div>
+            {friendRequests.length > 0 ? (
+              <div className="space-y-2">
+                <p className="text-xs text-muted-foreground">Incoming Requests</p>
+                {friendRequests.map((request) => (
+                  <div key={request._id} className="rounded-md border p-2">
+                    <p className="text-xs">{request.sender.username}</p>
+                    <div className="mt-2 flex gap-2">
+                      <Button size="xs" onClick={() => handleIncomingRequest(request._id, "accepted")}>
+                        Accept
+                      </Button>
+                      <Button
+                        size="xs"
+                        variant="outline"
+                        onClick={() => handleIncomingRequest(request._id, "rejected")}
+                      >
+                        Reject
+                      </Button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : null}
+          </div>
         </sheet.SheetContent>
       </sheet.Sheet>
     </>

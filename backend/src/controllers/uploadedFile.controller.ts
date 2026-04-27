@@ -1,6 +1,7 @@
 import type { Request, Response } from "express";
-import { unlink } from "fs/promises";
+import { copyFile, mkdir, unlink } from "fs/promises";
 import mongoose from "mongoose";
+import path from "path";
 
 // lib
 import cloud from "../lib/cloud.ts";
@@ -102,13 +103,88 @@ export const uploadChatFile = async (req: Request, res: Response) => {
             return res.status(403).json({ message: "Forbidden" });
         }
 
+        const mimeType = req.file.mimetype?.toLowerCase() ?? "";
+        const extension = path.extname(req.file.originalname || "").toLowerCase();
+        const isLikelyMedia =
+            mimeType.startsWith("image/") ||
+            mimeType.startsWith("video/") ||
+            mimeType.startsWith("audio/") ||
+            [".png", ".jpg", ".jpeg", ".gif", ".webp", ".bmp", ".svg", ".mp4", ".webm", ".mov", ".mp3", ".wav", ".m4a"].includes(extension);
+        const isLikelyDocument = [".pdf", ".doc", ".docx", ".ppt", ".pptx", ".xls", ".xlsx", ".txt", ".md"].includes(extension);
+
+        const preferredResourceTypes: Array<"auto" | "raw"> = isLikelyMedia
+            ? ["auto"]
+            : isLikelyDocument
+              ? ["auto", "raw"]
+              : ["raw", "auto"];
+
+        const uploadOptionsBase = {
+            folder: "opensource-chat-platform/chat-files",
+        } as const;
+
+        const uploadWithResourceType = async (type: "auto" | "raw") =>
+            cloud.uploader.upload(req.file!.path, {
+                ...uploadOptionsBase,
+                resource_type: type,
+            });
+
+        const storeLocalAndGetUrl = async () => {
+            const uploadsDir = path.join(import.meta.dir, "../../uploads/chat-files");
+            await mkdir(uploadsDir, { recursive: true });
+            const safeName = req.file!.originalname.replace(/[^a-zA-Z0-9._-]/g, "_");
+            const storedName = `${Date.now()}-${safeName}`;
+            const destination = path.join(uploadsDir, storedName);
+            await copyFile(req.file!.path, destination);
+            const host = req.get("host");
+            const protocol = req.protocol || "http";
+            return host
+                ? `${protocol}://${host}/uploads/chat-files/${encodeURIComponent(storedName)}`
+                : `/uploads/chat-files/${encodeURIComponent(storedName)}`;
+        };
+
         const uploaded =
             process.env.NODE_ENV === "test"
                 ? { secure_url: `https://example.com/test-upload/${Date.now()}-${req.file.originalname}` }
-                : await cloud.uploader.upload(req.file.path, {
-                      resource_type: "auto",
-                      folder: "opensource-chat-platform/chat-files",
-                  });
+                : extension === ".pdf"
+                  ? { secure_url: await storeLocalAndGetUrl() }
+                : await (async () => {
+                      try {
+                          let lastError: unknown;
+                          for (const candidate of preferredResourceTypes) {
+                              try {
+                                  return await uploadWithResourceType(candidate);
+                              } catch (error) {
+                                  lastError = error;
+                              }
+                          }
+                          throw lastError;
+                      } catch (uploadError) {
+                          const message =
+                              uploadError instanceof Error
+                                  ? uploadError.message
+                                  : typeof uploadError === "object" &&
+                                      uploadError !== null &&
+                                      "message" in uploadError &&
+                                      typeof (uploadError as { message?: unknown }).message === "string"
+                                    ? (uploadError as { message: string }).message
+                                    : String(uploadError);
+                          const needsUnsignedPreset = message.includes(
+                              "Upload preset must be specified when using unsigned upload"
+                          );
+
+                          if (needsUnsignedPreset) {
+                              try {
+                                  return await uploadWithResourceType("auto");
+                              } catch {
+                                  // Fall through to local storage fallback below.
+                              }
+                          }
+
+                          // Final fallback: store locally so uploads still work even when
+                          // Cloudinary account settings/credentials are misconfigured.
+                          return { secure_url: await storeLocalAndGetUrl() };
+                      }
+                  })();
 
         const fileDoc = await UploadedFile.create({
             uploadedBy: me,
