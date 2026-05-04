@@ -30,3 +30,15 @@ export const changePasswordSchema = z.object({
     currentPassword: z.string().min(1, "Current password is required"),
     newPassword: z.string().min(6, "Password must be at least 6 characters"),
 });
+
+export const notificationPreferencesUpdateSchema = z
+    .object({
+        toastMessages: z.boolean().optional(),
+        toastFriendRequests: z.boolean().optional(),
+        toastTeamUpdates: z.boolean().optional(),
+        toastTeamMembership: z.boolean().optional(),
+        toastDurationSeconds: z.number().int().min(2).max(30).optional(),
+    })
+    .refine((body) => Object.keys(body).length > 0, {
+        message: "At least one preference field is required",
+    });

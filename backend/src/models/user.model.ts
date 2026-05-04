@@ -54,6 +54,13 @@ const userSchema = new mongoose.Schema(
             type: Date,
             default: null,
         },
+        notificationPreferences: {
+            toastMessages: { type: Boolean, default: true },
+            toastFriendRequests: { type: Boolean, default: true },
+            toastTeamUpdates: { type: Boolean, default: true },
+            toastTeamMembership: { type: Boolean, default: true },
+            toastDurationSeconds: { type: Number, default: 4, min: 2, max: 30 },
+        },
     },
     { timestamps: true }
 );

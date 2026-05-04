@@ -77,6 +77,7 @@ export default function TeamChannelChatPage() {
       conversationId={conversationId}
       myUserId={myUserId}
       variant="team"
+      teamId={teamId}
       teamTitle={channelTitle}
       teamSubtitle={teamName ? `Team: ${teamName}` : undefined}
       messagePlaceholder={`Message ${channelTitle}`}

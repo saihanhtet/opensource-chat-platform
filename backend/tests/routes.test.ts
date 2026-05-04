@@ -261,6 +261,33 @@ describe("Auth routes", () => {
         const res = await agent.put("/api/auth/profile").send({});
         expect(res.status).toBe(400);
     });
+
+    test("PUT /api/auth/notification-preferences returns 401 without auth", async () => {
+        const res = await request(app).put("/api/auth/notification-preferences").send({
+            toastMessages: false,
+        });
+        expect(res.status).toBe(401);
+    });
+
+    test("PUT /api/auth/notification-preferences updates toggles and duration", async () => {
+        const { agent } = await signUp(app, uniqueUser());
+        const res = await agent.put("/api/auth/notification-preferences").send({
+            toastMessages: false,
+            toastDurationSeconds: 10,
+        });
+        expect(res.status).toBe(200);
+        expect(res.body.user.notificationPreferences.toastMessages).toBe(false);
+        expect(res.body.user.notificationPreferences.toastDurationSeconds).toBe(10);
+        const check = await agent.get("/api/auth/check-token");
+        expect(check.body.notificationPreferences.toastMessages).toBe(false);
+        expect(check.body.notificationPreferences.toastDurationSeconds).toBe(10);
+    });
+
+    test("PUT /api/auth/notification-preferences returns 400 for empty body", async () => {
+        const { agent } = await signUp(app, uniqueUser());
+        const res = await agent.put("/api/auth/notification-preferences").send({});
+        expect(res.status).toBe(400);
+    });
 });
 
 describe("Team routes", () => {
@@ -462,6 +489,60 @@ describe("Team member routes", () => {
             .put(`/api/team-members/${ownerRecord._id}`)
             .send({ status: "removed" });
         expect(adminUpdateOwner.status).toBe(403);
+    });
+
+    test("moderator can invite a member by identifier", async () => {
+        const moderator = await signUp(app, uniqueUser());
+        const joiner = await signUp(app, uniqueUser());
+        await owner.agent.post("/api/team-members").send({
+            teamId,
+            userId: moderator.userId,
+            memberRole: "moderator",
+        });
+        const res = await moderator.agent.post("/api/team-members").send({
+            teamId,
+            identifier: joiner.username,
+            memberRole: "member",
+        });
+        expect(res.status).toBe(201);
+        expect(res.body.memberRole).toBe("member");
+    });
+
+    test("moderator cannot assign admin when inviting", async () => {
+        const moderator = await signUp(app, uniqueUser());
+        const joiner = await signUp(app, uniqueUser());
+        await owner.agent.post("/api/team-members").send({
+            teamId,
+            userId: moderator.userId,
+            memberRole: "moderator",
+        });
+        const res = await moderator.agent.post("/api/team-members").send({
+            teamId,
+            identifier: joiner.username,
+            memberRole: "admin",
+        });
+        expect(res.status).toBe(403);
+    });
+
+    test("admin can set membership status to banned", async () => {
+        const admin = await signUp(app, uniqueUser());
+        const member = await signUp(app, uniqueUser());
+        await owner.agent.post("/api/team-members").send({
+            teamId,
+            userId: admin.userId,
+            memberRole: "admin",
+        });
+        const memberRecord = await owner.agent.post("/api/team-members").send({
+            teamId,
+            userId: member.userId,
+            memberRole: "member",
+        });
+        expect(memberRecord.status).toBe(201);
+        const ban = await admin.agent
+            .put(`/api/team-members/${memberRecord.body._id}`)
+            .send({ status: "banned" });
+        expect(ban.status).toBe(200);
+        expect(ban.body.status).toBe("banned");
     });
 
     test("moderator cannot update same-level or higher roles", async () => {
@@ -898,6 +979,33 @@ describe("Cross-route flow", () => {
             content: "nope",
         });
         expect(blocked.status).toBe(403);
+    });
+
+    test("team channel creation respects channelManagement.createChannel policy", async () => {
+        const owner = await signUp(app, uniqueUser());
+        const admin = await signUp(app, uniqueUser());
+        const team = await owner.agent.post("/api/teams").send({ teamName: "PolicyChannelTeam" });
+        expect(team.status).toBe(201);
+        const teamId = team.body._id;
+
+        await owner.agent.post("/api/team-members").send({
+            teamId,
+            userId: admin.userId,
+            memberRole: "admin",
+        });
+
+        const blocked = await admin.agent.post(`/api/teams/${teamId}/channels`).send({ name: "nope" });
+        expect(blocked.status).toBe(403);
+
+        const policy = await owner.agent.put(`/api/teams/${teamId}`).send({
+            rolePermissions: {
+                channelManagement: { createChannel: ["owner", "admin"] },
+            },
+        });
+        expect(policy.status).toBe(200);
+
+        const ok = await admin.agent.post(`/api/teams/${teamId}/channels`).send({ name: "staff" });
+        expect(ok.status).toBe(201);
     });
 });
 

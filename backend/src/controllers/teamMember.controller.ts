@@ -3,8 +3,10 @@ import mongoose from "mongoose";
 
 import {
     addUserToAllTeamChannels,
+    emitTeamChannelConversationsUpdated,
     removeUserFromAllTeamChannels,
 } from "../lib/teamParticipants.ts";
+import { getRequesterSpaceRole } from "../lib/teamRolePolicy.ts";
 import * as utils from "../lib/utils.ts";
 import type { TeamDocument } from "../models/team.model.ts";
 import Team from "../models/team.model.ts";
@@ -41,17 +43,7 @@ const getRequesterRole = async (
     team: TeamDocument | null,
     teamId: mongoose.Types.ObjectId,
     userId: mongoose.Types.ObjectId
-): Promise<TeamRole | null> => {
-    if (!team) return null;
-    if (team.createdBy.equals(userId)) return "owner";
-    const membership = await TeamMember.findOne({
-        teamId,
-        userId,
-        status: "active",
-    }).select("memberRole");
-    if (!membership) return null;
-    return membership.memberRole as TeamRole;
-};
+) => getRequesterSpaceRole(team, teamId, userId);
 
 const canManageTeamMember = async (
     team: TeamDocument | null,
@@ -59,7 +51,11 @@ const canManageTeamMember = async (
     userId: mongoose.Types.ObjectId
 ) => {
     const requesterRole = await getRequesterRole(team, teamId, userId);
-    return requesterRole === "owner" || requesterRole === "admin";
+    return (
+        requesterRole === "owner"
+        || requesterRole === "admin"
+        || requesterRole === "moderator"
+    );
 };
 
 const canRequesterManageTarget = (
@@ -134,6 +130,7 @@ export const createTeamMember = async (req: Request, res: Response) => {
         });
         if (member.status === "active") {
             await addUserToAllTeamChannels(teamObjectId, userObjectId);
+            await emitTeamChannelConversationsUpdated(teamObjectId);
         }
         const populated = await TeamMember.findById(member._id)
             .populate("userId", "_id username email profilePic status lastSeenAt updatedAt");
@@ -146,7 +143,9 @@ export const createTeamMember = async (req: Request, res: Response) => {
                     spaceName: team.teamName,
                 },
             };
-            realtime.emitToTeam(String(populated.teamId), realtime.SOCKET_EVENTS.teamMemberCreated, payload);
+            const teamIdStr = String(populated.teamId);
+            realtime.emitToTeam(teamIdStr, realtime.SOCKET_EVENTS.teamMemberCreated, payload);
+            realtime.emitToUser(String(userObjectId), realtime.SOCKET_EVENTS.teamMemberCreated, payload);
         }
         return res.status(201).json(populated);
     } catch (error) {
@@ -281,6 +280,9 @@ export const updateTeamMember = async (req: Request, res: Response) => {
         } else if (!nowActive && wasActive) {
             await removeUserFromAllTeamChannels(member.teamId, member.userId);
         }
+        if (nowActive !== wasActive) {
+            await emitTeamChannelConversationsUpdated(member.teamId as mongoose.Types.ObjectId);
+        }
         const populated = await TeamMember.findById(member._id)
             .populate("userId", "_id username email profilePic status lastSeenAt updatedAt");
         if (populated) {
@@ -292,7 +294,9 @@ export const updateTeamMember = async (req: Request, res: Response) => {
                     spaceName: team.teamName,
                 },
             };
-            realtime.emitToTeam(String(populated.teamId), realtime.SOCKET_EVENTS.teamMemberUpdated, payload);
+            const teamIdStr = String(populated.teamId);
+            realtime.emitToTeam(teamIdStr, realtime.SOCKET_EVENTS.teamMemberUpdated, payload);
+            realtime.emitToUser(String(member.userId), realtime.SOCKET_EVENTS.teamMemberUpdated, payload);
         }
         return res.status(200).json(populated);
     } catch (error) {
@@ -330,8 +334,11 @@ export const deleteTeamMember = async (req: Request, res: Response) => {
             member.teamId as mongoose.Types.ObjectId,
             member.userId as mongoose.Types.ObjectId
         );
+        await emitTeamChannelConversationsUpdated(member.teamId as mongoose.Types.ObjectId);
         await TeamMember.findByIdAndDelete(id);
-        realtime.emitToTeam(teamId, realtime.SOCKET_EVENTS.teamMemberRemoved, { _id: id, teamId, userId });
+        const removedPayload = { _id: id, teamId, userId };
+        realtime.emitToTeam(teamId, realtime.SOCKET_EVENTS.teamMemberRemoved, removedPayload);
+        realtime.emitToUser(userId, realtime.SOCKET_EVENTS.teamMemberRemoved, removedPayload);
         return res.status(200).json({ message: "Team member removed" });
     } catch (error) {
         return utils.sendServerError(res, "deleteTeamMember", error);

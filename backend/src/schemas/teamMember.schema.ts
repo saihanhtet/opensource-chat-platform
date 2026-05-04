@@ -6,7 +6,7 @@ export const createTeamMemberSchema = z.object({
     userId: objectIdString.optional(),
     identifier: z.string().trim().min(1).optional(),
     memberRole: z.enum(["owner", "admin", "moderator", "member"]).optional(),
-    status: z.enum(["pending", "active", "removed"]).optional(),
+    status: z.enum(["pending", "active", "removed", "banned"]).optional(),
 }).refine((value) => value.userId || value.identifier, {
     message: "Either userId or identifier is required",
     path: ["identifier"],
@@ -14,5 +14,5 @@ export const createTeamMemberSchema = z.object({
 
 export const updateTeamMemberSchema = z.object({
     memberRole: z.enum(["owner", "admin", "moderator", "member"]).optional(),
-    status: z.enum(["pending", "active", "removed"]).optional(),
+    status: z.enum(["pending", "active", "removed", "banned"]).optional(),
 });

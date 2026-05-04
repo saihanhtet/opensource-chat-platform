@@ -1,5 +1,13 @@
 import { apiUrl } from "@/lib/api"
 
+export type NotificationPreferences = {
+  toastMessages: boolean
+  toastFriendRequests: boolean
+  toastTeamUpdates: boolean
+  toastTeamMembership: boolean
+  toastDurationSeconds: number
+}
+
 export type CurrentUser = {
   _id: string
   username: string
@@ -9,6 +17,7 @@ export type CurrentUser = {
   status?: string
   lastSeenAt?: string
   updatedAt?: string
+  notificationPreferences?: Partial<NotificationPreferences> | null
 }
 
 export type Team = {
@@ -23,6 +32,9 @@ export type Team = {
       admin?: Array<"owner" | "admin" | "moderator" | "member">
       moderator?: Array<"owner" | "admin" | "moderator" | "member">
       member?: Array<"owner" | "admin" | "moderator" | "member">
+    }
+    channelManagement?: {
+      createChannel?: Array<"owner" | "admin" | "moderator" | "member">
     }
   }
 }
@@ -42,7 +54,7 @@ export type TeamMember = {
   teamId: string
   userId: TeamMemberUser
   memberRole: "owner" | "admin" | "moderator" | "member"
-  status: "pending" | "active" | "removed"
+  status: "pending" | "active" | "removed" | "banned"
   joinedAt: string
 }
 
@@ -119,7 +131,7 @@ export async function updateTeamMember(
   memberId: string,
   input: {
     memberRole?: "owner" | "admin" | "moderator" | "member"
-    status?: "pending" | "active" | "removed"
+    status?: "pending" | "active" | "removed" | "banned"
   }
 ): Promise<TeamMember> {
   const res = await fetch(apiUrl(`/api/team-members/${memberId}`), {

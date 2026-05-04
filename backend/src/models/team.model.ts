@@ -46,6 +46,13 @@ const teamSchema = new mongoose.Schema(
                     default: [],
                 },
             },
+            channelManagement: {
+                createChannel: {
+                    type: [String],
+                    enum: ["owner", "admin", "moderator", "member"],
+                    default: ["owner"],
+                },
+            },
         },
     },
     { timestamps: true }

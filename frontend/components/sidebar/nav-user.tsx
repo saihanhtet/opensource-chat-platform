@@ -92,10 +92,11 @@ export function NavUser({
                 )}
                 {theme === "dark" ? "Light mode" : "Dark mode"}
               </dropdownMenu.DropdownMenuItem>
-              <dropdownMenu.DropdownMenuItem>
-                <remixicon.RiNotificationLine
-                />
-                Notifications
+              <dropdownMenu.DropdownMenuItem asChild>
+                <Link href="/settings/notifications">
+                  <remixicon.RiNotificationLine />
+                  Notifications
+                </Link>
               </dropdownMenu.DropdownMenuItem>
             </dropdownMenu.DropdownMenuGroup>
             <dropdownMenu.DropdownMenuSeparator />

@@ -94,7 +94,28 @@ export const updateTeam = async (req: Request, res: Response) => {
             return res.status(403).json({ message: "Forbidden" });
         }
 
-        Object.assign(team, parsed.data);
+        const data = parsed.data;
+        const { rolePermissions: incomingRolePermissions, ...rest } = data;
+        if (incomingRolePermissions) {
+            const plain = team.toObject({ flattenMaps: true }) as {
+                rolePermissions?: {
+                    statusManagement?: Record<string, unknown>;
+                    channelManagement?: Record<string, unknown>;
+                };
+            };
+            const curRp = plain.rolePermissions ?? {};
+            team.rolePermissions = {
+                statusManagement: {
+                    ...curRp.statusManagement,
+                    ...(incomingRolePermissions.statusManagement ?? {}),
+                },
+                channelManagement: {
+                    ...curRp.channelManagement,
+                    ...(incomingRolePermissions.channelManagement ?? {}),
+                },
+            };
+        }
+        Object.assign(team, rest);
         await team.save();
         const payload = {
             ...team.toObject(),

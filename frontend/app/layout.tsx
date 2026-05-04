@@ -4,8 +4,8 @@ import "./globals.css";
 import { cn } from "@/lib/utils";
 import { TooltipProvider } from "@/components/ui/tooltip"
 import { SocketProvider } from "@/components/providers/socket-provider";
+import { NotificationPreferencesProvider } from "@/components/providers/notification-preferences-provider";
 import { RealtimeNotifier } from "@/components/providers/realtime-notifier";
-import { Toaster } from "sonner";
 
 const dmSansHeading = DM_Sans({subsets:['latin'],variable:'--font-heading'});
 
@@ -39,9 +39,10 @@ export default function RootLayout({
       <body className="min-h-full flex flex-col">
         <TooltipProvider>
           <SocketProvider>
-            <RealtimeNotifier />
-            <Toaster richColors position="top-right" />
-            {children}
+            <NotificationPreferencesProvider>
+              <RealtimeNotifier />
+              {children}
+            </NotificationPreferencesProvider>
           </SocketProvider>
         </TooltipProvider>
       </body>

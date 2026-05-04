@@ -8,6 +8,9 @@ const rolePermissionsSchema = z.object({
         moderator: z.array(teamRoleSchema).optional(),
         member: z.array(teamRoleSchema).optional(),
     }).optional(),
+    channelManagement: z.object({
+        createChannel: z.array(teamRoleSchema).optional(),
+    }).optional(),
 }).optional();
 
 export const createTeamSchema = z.object({

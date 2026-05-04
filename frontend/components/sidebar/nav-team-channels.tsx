@@ -9,48 +9,89 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import * as sheet from "@/components/ui/sheet"
 import * as chatApi from "@/lib/chat-api"
+import { teamMemberFromSocketPayload } from "@/lib/team-member-socket-merge"
 import { useTeamRealtime } from "@/lib/use-team-realtime"
 import { RiHashtag } from "@remixicon/react"
 
 export function NavTeamChannels({
   teamId,
-  isOwner,
+  canCreateChannel,
 }: {
   teamId: string
-  isOwner: boolean
+  canCreateChannel: boolean
 }) {
   const pathname = usePathname()
   const router = useRouter()
   const [channels, setChannels] = React.useState<chatApi.Conversation[]>([])
   const [loading, setLoading] = React.useState(true)
   const [error, setError] = React.useState<string>()
+  const [noChannelAccess, setNoChannelAccess] = React.useState(false)
   const [createOpen, setCreateOpen] = React.useState(false)
   const [newName, setNewName] = React.useState("")
   const [creating, setCreating] = React.useState(false)
   const [createError, setCreateError] = React.useState<string>()
 
-  const loadChannels = React.useCallback(async () => {
-    setLoading(true)
-    setError(undefined)
+  const loadChannels = React.useCallback(async (mode: "full" | "silent" = "full") => {
+    const silent = mode === "silent"
+    if (!silent) {
+      setLoading(true)
+      setError(undefined)
+      setNoChannelAccess(false)
+    }
     try {
       const list = await chatApi.listTeamChannels(teamId)
       setChannels(list)
+      setNoChannelAccess(false)
+      if (silent) setError(undefined)
     } catch (fetchError) {
-      setError(fetchError instanceof Error ? fetchError.message : "Failed to load channels")
+      const msg = fetchError instanceof Error ? fetchError.message : "Failed to load channels"
+      const forbidden = /forbidden|403/i.test(msg)
       setChannels([])
+      if (forbidden) {
+        setNoChannelAccess(true)
+        setError(undefined)
+      } else if (!silent) {
+        setError(msg)
+        setNoChannelAccess(false)
+      }
     } finally {
-      setLoading(false)
+      if (!silent) setLoading(false)
     }
   }, [teamId])
 
   React.useEffect(() => {
-    void loadChannels()
+    void loadChannels("full")
   }, [loadChannels])
+
+  const reloadChannelsIfThisTeam = React.useCallback(
+    (raw: unknown) => {
+      const row = teamMemberFromSocketPayload(raw)
+      if (!row || row.teamId !== teamId) return
+      void loadChannels("silent")
+    },
+    [loadChannels, teamId]
+  )
+
+  const reloadChannelsOnMemberRemoved = React.useCallback(
+    (raw: unknown) => {
+      const payload = raw as { teamId?: unknown }
+      const tid = payload.teamId != null ? String(payload.teamId) : ""
+      if (tid !== teamId) return
+      void loadChannels("silent")
+    },
+    [loadChannels, teamId]
+  )
 
   useTeamRealtime({
     teamId,
-    onChange: () => {
-      void loadChannels()
+    onTeamMemberCreated: reloadChannelsIfThisTeam,
+    onTeamMemberUpdated: reloadChannelsIfThisTeam,
+    onTeamMemberRemoved: reloadChannelsOnMemberRemoved,
+    onTeamChannelCreated: () => {
+      void loadChannels("silent")
+    },
+    onTeamDeleted: () => {
+      void loadChannels("full")
     },
   })
 
@@ -78,7 +119,7 @@ export function NavTeamChannels({
       <sidebar.SidebarGroup>
         <div className="flex items-center justify-between gap-2 pr-2">
           <sidebar.SidebarGroupLabel>Channels</sidebar.SidebarGroupLabel>
-          {isOwner ? (
+          {canCreateChannel ? (
             <Button variant="ghost" size="sm" className="h-7 px-2 text-xs" onClick={() => setCreateOpen(true)}>
               New
             </Button>
@@ -100,7 +141,7 @@ export function NavTeamChannels({
           {!loading && channels.length === 0 ? (
             <sidebar.SidebarMenuItem>
               <sidebar.SidebarMenuButton size="sm" disabled className="text-muted-foreground">
-                No channels yet
+                {noChannelAccess ? "No channel access" : "No channels yet"}
               </sidebar.SidebarMenuButton>
             </sidebar.SidebarMenuItem>
           ) : null}

@@ -1,5 +1,6 @@
 "use client"
 
+import Link from "next/link"
 import { usePathname, useRouter } from "next/navigation"
 import * as React from "react"
 
@@ -15,6 +16,11 @@ import * as sidebar from "@/components/ui/sidebar"
 import { Textarea } from "@/components/ui/textarea"
 import * as friendApi from "@/lib/friend-api"
 import { SOCKET_EVENTS } from "@/lib/socket-events"
+import {
+  mergeTeamMemberIntoList,
+  removeTeamMemberFromList,
+  teamMemberFromSocketPayload,
+} from "@/lib/team-member-socket-merge"
 import * as teamApi from "@/lib/team-api"
 import { useFriendRealtime } from "@/lib/use-friend-realtime"
 import { usePresenceRealtime } from "@/lib/use-presence-realtime"
@@ -387,7 +393,49 @@ export function AppSidebar({ onTeamDataChange, ...props }: AppSidebarProps) {
     }
   }
 
-  const mappedUsers = members
+  const isSpaceAdminNav = React.useMemo(() => {
+    if (!effectiveTeamId || !currentUserId) return false
+    const meta = teams.find((t) => t.id === effectiveTeamId)
+    if (meta?.team.createdBy === currentUserId) return true
+    const mine = members.find(
+      (m) => m.userId?._id === currentUserId && m.teamId === effectiveTeamId
+    )
+    return mine?.status === "active" && mine.memberRole === "admin"
+  }, [effectiveTeamId, currentUserId, teams, members])
+
+  const isSpaceModeratorNav = React.useMemo(() => {
+    if (!effectiveTeamId || !currentUserId) return false
+    const meta = teams.find((t) => t.id === effectiveTeamId)
+    if (meta?.team.createdBy === currentUserId) return false
+    const mine = members.find(
+      (m) => m.userId?._id === currentUserId && m.teamId === effectiveTeamId
+    )
+    return mine?.status === "active" && mine.memberRole === "moderator"
+  }, [effectiveTeamId, currentUserId, teams, members])
+
+  const canCreateTeamChannel = React.useMemo(() => {
+    if (!effectiveTeamId || !currentUserId) return false
+    const meta = teams.find((t) => t.id === effectiveTeamId)
+    const team = meta?.team
+    if (!team) return false
+    if (team.createdBy === currentUserId) return true
+    const mine = members.find(
+      (m) => m.userId?._id === currentUserId && m.teamId === effectiveTeamId
+    )
+    if (mine?.status !== "active") return false
+    const role = mine.memberRole as "owner" | "admin" | "moderator" | "member"
+    const configured = team.rolePermissions?.channelManagement?.createChannel
+    const allowed: Array<"owner" | "admin" | "moderator" | "member"> =
+      Array.isArray(configured) && configured.length > 0 ? configured : ["owner"]
+    return allowed.includes(role)
+  }, [effectiveTeamId, currentUserId, teams, members])
+
+  const rosterForDm = React.useMemo(() => {
+    if (!effectiveTeamId) return members
+    return members.filter((m) => m.teamId === effectiveTeamId && m.status === "active")
+  }, [effectiveTeamId, members])
+
+  const mappedUsers = rosterForDm
     .map((member) => ({
       id: member.userId?._id ?? member._id,
       username: member.userId?.username ?? "unknown",
@@ -562,14 +610,41 @@ export function AppSidebar({ onTeamDataChange, ...props }: AppSidebarProps) {
     }
   }, [])
 
-  const onTeamSocketChange = React.useCallback(async () => {
+  const onTeamMetaSocketChange = React.useCallback(async () => {
     await refreshTeams()
     await refreshActiveContext()
   }, [refreshTeams, refreshActiveContext])
 
+  const applySidebarMemberUpsert = React.useCallback(
+    (raw: unknown) => {
+      if (!effectiveTeamId) return
+      const incoming = teamMemberFromSocketPayload(raw)
+      if (!incoming || incoming.teamId !== effectiveTeamId) return
+      setMembers((prev) => mergeTeamMemberIntoList(prev, incoming))
+    },
+    [effectiveTeamId]
+  )
+
+  const applySidebarMemberRemoved = React.useCallback(
+    (raw: unknown) => {
+      if (!effectiveTeamId) return
+      const payload = raw as { _id?: string; teamId?: unknown }
+      const tid = payload.teamId != null ? String(payload.teamId) : undefined
+      const removedId = payload._id
+      if (!tid || tid !== effectiveTeamId || !removedId) return
+      setMembers((prev) => removeTeamMemberFromList(prev, removedId))
+    },
+    [effectiveTeamId]
+  )
+
   useTeamRealtime({
     teamId: effectiveTeamId,
-    onChange: onTeamSocketChange,
+    onTeamMemberCreated: applySidebarMemberUpsert,
+    onTeamMemberUpdated: applySidebarMemberUpsert,
+    onTeamMemberRemoved: applySidebarMemberRemoved,
+    onTeamCreated: onTeamMetaSocketChange,
+    onTeamUpdated: onTeamMetaSocketChange,
+    onTeamDeleted: onTeamMetaSocketChange,
   })
   useFriendRealtime(() => {
     if (!effectiveTeamId) void refreshActiveContext()
@@ -621,12 +696,50 @@ export function AppSidebar({ onTeamDataChange, ...props }: AppSidebarProps) {
             </sidebar.SidebarGroup>
           ) : null}
           {effectiveTeamId ? (
-            <NavTeamChannels
-              teamId={effectiveTeamId}
-              isOwner={
-                teams.find((team) => team.id === effectiveTeamId)?.team.createdBy === currentUserId
-              }
-            />
+            <NavTeamChannels teamId={effectiveTeamId} canCreateChannel={canCreateTeamChannel} />
+          ) : null}
+          {effectiveTeamId ? (
+            <sidebar.SidebarGroup className="px-2">
+              <sidebar.SidebarGroupLabel>Space</sidebar.SidebarGroupLabel>
+              <sidebar.SidebarMenu>
+                <sidebar.SidebarMenuItem>
+                  <sidebar.SidebarMenuButton
+                    asChild
+                    size="sm"
+                    isActive={
+                      pathname === `/team/${effectiveTeamId}`
+                      || pathname === `/team/${effectiveTeamId}/`
+                    }
+                  >
+                    <Link href={`/team/${effectiveTeamId}`}>Home</Link>
+                  </sidebar.SidebarMenuButton>
+                </sidebar.SidebarMenuItem>
+                {isSpaceAdminNav ? (
+                  <sidebar.SidebarMenuItem>
+                    <sidebar.SidebarMenuButton
+                      asChild
+                      size="sm"
+                      isActive={Boolean(pathname?.startsWith(`/team/${effectiveTeamId}/admin`))}
+                    >
+                      <Link href={`/team/${effectiveTeamId}/admin`}>Admin</Link>
+                    </sidebar.SidebarMenuButton>
+                  </sidebar.SidebarMenuItem>
+                ) : null}
+                {isSpaceModeratorNav ? (
+                  <sidebar.SidebarMenuItem>
+                    <sidebar.SidebarMenuButton
+                      asChild
+                      size="sm"
+                      isActive={Boolean(
+                        pathname?.startsWith(`/team/${effectiveTeamId}/moderation`)
+                      )}
+                    >
+                      <Link href={`/team/${effectiveTeamId}/moderation`}>Moderation</Link>
+                    </sidebar.SidebarMenuButton>
+                  </sidebar.SidebarMenuItem>
+                ) : null}
+              </sidebar.SidebarMenu>
+            </sidebar.SidebarGroup>
           ) : null}
           <NavMain
             users={mappedUsers}

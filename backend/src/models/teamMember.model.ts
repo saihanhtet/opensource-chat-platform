@@ -20,7 +20,7 @@ const teamMemberSchema = new mongoose.Schema(
         },
         status: {
             type: String,
-            enum: ["pending", "active", "removed"],
+            enum: ["pending", "active", "removed", "banned"],
             default: "active",
         },
         joinedAt: {

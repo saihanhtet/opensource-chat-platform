@@ -1,6 +1,7 @@
 import type { Request, Response } from "express";
 import mongoose from "mongoose";
 
+import { userCanCreateTeamChannel } from "../lib/teamRolePolicy.ts";
 import {
     getActiveTeamParticipantIds,
     userCanAccessTeam,
@@ -56,7 +57,7 @@ export const createTeamChannel = async (req: Request, res: Response) => {
         const team = await Team.findById(teamId);
         if (!team) return res.status(404).json({ message: "Team not found" });
 
-        if (!team.createdBy.equals(me)) {
+        if (!(await userCanCreateTeamChannel(team, teamId, me))) {
             return res.status(403).json({ message: "Forbidden" });
         }
 

@@ -3,6 +3,8 @@ import mongoose from "mongoose";
 import Conversation from "../models/conversation.model.ts";
 import Team from "../models/team.model.ts";
 import TeamMember from "../models/teamMember.model.ts";
+import { SOCKET_EVENTS } from "../socket/events.ts";
+import * as realtime from "../socket/realtime.ts";
 
 export async function getActiveTeamParticipantIds(
     teamId: mongoose.Types.ObjectId
@@ -48,4 +50,17 @@ export async function removeUserFromAllTeamChannels(
     userId: mongoose.Types.ObjectId
 ): Promise<void> {
     await Conversation.updateMany({ type: "team", teamId }, { $pull: { participantIds: userId } });
+}
+
+/** Notify everyone in each team channel so clients refresh participants instantly. */
+export async function emitTeamChannelConversationsUpdated(
+    teamId: mongoose.Types.ObjectId
+): Promise<void> {
+    const rows = await Conversation.find({ type: "team", teamId }).select("_id").lean();
+    for (const row of rows) {
+        const doc = await Conversation.findById(row._id);
+        if (doc) {
+            realtime.emitToConversation(String(doc._id), SOCKET_EVENTS.conversationUpdated, doc);
+        }
+    }
 }

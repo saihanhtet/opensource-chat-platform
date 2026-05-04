@@ -10,6 +10,7 @@ import { useChatRealtime } from "@/lib/use-chat-realtime"
 import { usePresenceRealtime } from "@/lib/use-presence-realtime"
 import { useSocket } from "@/lib/use-socket"
 import * as remixIconReact from "@remixicon/react"
+import Link from "next/link"
 import * as React from "react"
 
 export type ChatThreadPanelProps = {
@@ -17,6 +18,8 @@ export type ChatThreadPanelProps = {
   myUserId: string
   messagePlaceholder: string
   variant: "direct" | "team"
+  /** Space id for team channels — used when access is revoked over the socket. */
+  teamId?: string
   directUsername?: string
   directDisplayName?: string
   initialPeerStatus?: string
@@ -30,6 +33,7 @@ export function ChatThreadPanel({
   myUserId,
   messagePlaceholder,
   variant,
+  teamId,
   directUsername,
   directDisplayName,
   initialPeerStatus,
@@ -81,7 +85,12 @@ export function ChatThreadPanel({
   const [editingDraft, setEditingDraft] = React.useState("")
   const [rewriting, setRewriting] = React.useState(false)
   const [typingUsers, setTypingUsers] = React.useState<string[]>([])
+  const [lostChannelAccess, setLostChannelAccess] = React.useState(false)
   const [error, setError] = React.useState<string>()
+
+  React.useEffect(() => {
+    setLostChannelAccess(false)
+  }, [conversationId])
   const listRef = React.useRef<HTMLDivElement>(null)
   const fileInputRef = React.useRef<HTMLInputElement>(null)
   const socket = useSocket()
@@ -138,8 +147,23 @@ export function ChatThreadPanel({
     }
   }, [conversationId, syncMessages])
 
+  const onConversationSocketUpdated = React.useCallback(
+    (payload: unknown) => {
+      const conv = payload as chatApi.Conversation
+      if (String(conv._id) !== String(conversationId)) return
+      if (variant !== "team") return
+      const ids = (conv.participantIds ?? []).map((id) => String(id))
+      if (!ids.includes(myUserId)) {
+        setLostChannelAccess(true)
+        setError("You no longer have access to this channel.")
+      }
+    },
+    [conversationId, myUserId, variant]
+  )
+
   const { setTyping } = useChatRealtime({
     conversationId,
+    onConversationUpdated: onConversationSocketUpdated,
     onMessageNew: (payload) => {
       const message = payload as chatApi.ChatMessage
       if (String(message.conversationId) !== String(conversationId)) return
@@ -216,6 +240,7 @@ export function ChatThreadPanel({
 
   const handleSend = async (event: React.FormEvent) => {
     event.preventDefault()
+    if (lostChannelAccess) return
     if (!conversationId || (!draft.trim() && !selectedFile)) return
     setSending(true)
     setError(undefined)
@@ -339,6 +364,14 @@ export function ChatThreadPanel({
 
       <div className="flex min-h-0 flex-1 flex-col bg-muted/30">
         {threadLoading ? <p className="p-4 text-sm text-muted-foreground">Loading chat...</p> : null}
+        {lostChannelAccess && teamId ? (
+          <div className="mx-4 mt-2 rounded-md border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-sm">
+            <p className="font-medium text-amber-950 dark:text-amber-100">Your access to this channel was updated.</p>
+            <Link href={`/team/${teamId}`} className="text-primary underline">
+              Back to space
+            </Link>
+          </div>
+        ) : null}
         {error ? <p className="p-4 text-sm text-destructive">{error}</p> : null}
 
         <div ref={listRef} className="flex-1 space-y-2 overflow-y-auto p-4">
@@ -510,7 +543,8 @@ export function ChatThreadPanel({
               value={draft}
               onChange={(event) => setDraft(event.target.value)}
               placeholder={messagePlaceholder}
-              className="h-12 w-full rounded-t-2xl border-0 bg-transparent px-4 text-sm outline-none"
+              disabled={lostChannelAccess}
+              className="h-12 w-full rounded-t-2xl border-0 bg-transparent px-4 text-sm outline-none disabled:cursor-not-allowed disabled:opacity-50"
             />
             {selectedFile ? (
               <div className="px-4 pb-2 text-xs text-muted-foreground">File: {selectedFile.name}</div>
@@ -520,7 +554,7 @@ export function ChatThreadPanel({
                 <button
                   type="button"
                   onClick={handleRewrite}
-                  disabled={!draft.trim() || rewriting}
+                  disabled={lostChannelAccess || !draft.trim() || rewriting}
                   className="rounded-md border px-2 py-1 text-xs disabled:opacity-50"
                   title="Rewrite text with Gemini free model"
                 >
@@ -529,7 +563,8 @@ export function ChatThreadPanel({
                 <button
                   type="button"
                   onClick={() => fileInputRef.current?.click()}
-                  className="rounded-md p-2 text-muted-foreground hover:bg-muted"
+                  disabled={lostChannelAccess}
+                  className="rounded-md p-2 text-muted-foreground hover:bg-muted disabled:opacity-50"
                   title="Attach file"
                 >
                   <remixIconReact.RiAttachment2 className="size-4" />
@@ -546,7 +581,12 @@ export function ChatThreadPanel({
               </div>
               <button
                 type="submit"
-                disabled={(!draft.trim() && !selectedFile) || !conversationId || sending}
+                disabled={
+                  lostChannelAccess
+                  || (!draft.trim() && !selectedFile)
+                  || !conversationId
+                  || sending
+                }
                 className="rounded-full bg-primary p-2 text-primary-foreground disabled:opacity-50"
                 title={sending ? "Sending..." : "Send message"}
               >
