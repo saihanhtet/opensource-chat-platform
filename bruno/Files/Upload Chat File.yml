@@ -1,0 +1,32 @@
+info:
+  name: Upload Chat File
+  type: http
+  seq: 7
+
+http:
+  method: POST
+  url: "{{BaseURL}}/files/upload"
+  body:
+    type: multipart-form
+    data:
+      - name: conversationId
+        value: "{{conversationId}}"
+      - name: content
+        value: "Optional caption for the attachment"
+      - name: file
+        value: "fixtures/sample-upload.txt"
+
+  auth: inherit
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5
+
+docs: |-
+  **Multipart fields:** `conversationId` (required), `file` (required), `content` (optional).
+
+  The `file` part points at `bruno/fixtures/sample-upload.txt` relative to this collection folder. If Bruno cannot resolve the path, use the Body tab → Multipart Form and pick a file manually; keep field names `conversationId`, `content`, `file`.
+
+  **Requires:** Cloudinary (or configured upload) in the backend; may fail in local setups without cloud credentials.

@@ -1,0 +1,24 @@
+info:
+  name: Create Team Channel
+  type: http
+  seq: 7
+
+http:
+  method: POST
+  url: "{{BaseURL}}/teams/{{teamId}}/channels"
+  body:
+    type: json
+    data: |-
+      {
+        "name": "general"
+      }
+  auth: inherit
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5
+
+docs: |-
+  Creates a named team channel (conversation). Requires permission to create channels on the team. Channel `name` must be unique per team.

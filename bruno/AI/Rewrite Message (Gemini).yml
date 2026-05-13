@@ -1,0 +1,29 @@
+info:
+  name: Rewrite Message (Gemini)
+  type: http
+  seq: 1
+
+http:
+  method: POST
+  url: "{{BaseURL}}/ai/rewrite"
+  body:
+    type: json
+    data: |-
+      {
+        "text": "hey can u send that doc asap?? thx",
+        "model": "gemini-2.5-flash"
+      }
+  auth: inherit
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5
+
+docs: |-
+  **Requires:** signed-in session cookie (`Sign In` first) and `GEMINI_API_KEY` in `backend/.env`.
+
+  **Response:** `{ "rewrittenText": string, "model": string }` (model is the server default when calling Google).
+
+  Optional body field `model` is accepted by validation; production currently uses the default model from the server.

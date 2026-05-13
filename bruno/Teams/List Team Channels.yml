@@ -1,0 +1,18 @@
+info:
+  name: List Team Channels
+  type: http
+  seq: 6
+
+http:
+  method: GET
+  url: "{{BaseURL}}/teams/{{teamId}}/channels"
+  auth: inherit
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5
+
+docs: |-
+  Lists team-type conversations for the team where you are a participant. Requires `teamId`.

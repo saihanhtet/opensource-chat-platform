@@ -12,7 +12,7 @@ If you only have a ZIP, extract it first; Bruno needs a real folder path on disk
 
 ## Prerequisites
 
-1. **Backend running** with `backend/.env` configured (see [../readme/backend-setup.md](../readme/backend-setup.md)).
+1. **Backend running** with `backend/.env` configured (see [../readme/backend-setup.md](../readme/backend-setup.md)). For **AI → Rewrite Message (Gemini)**, set **`GEMINI_API_KEY`** in `backend/.env`.
 2. Default API base URL: **`http://localhost:3000/api`** — set in collection variables as `BaseURL` if your `PORT` differs.
 3. **Demo users** (optional but recommended): from the repo root run `bun run seed`, then use:
    - `alice@demo.local` / `demo1234`
@@ -29,7 +29,7 @@ Typical flow:
 
 1. **Sign In** (or **Sign In (second user)** / **Sign In (receiver)** for another account).
 2. **Check Token** — should return `200` and the user JSON.
-3. Call **Teams**, **Messages**, etc.
+3. Call **Teams**, **Messages**, **AI** (rewrite), etc.
 
 Use **Sign Out** to clear the session cookie.
 
@@ -47,6 +47,8 @@ Many requests use placeholders:
 | `messageId` | **List Messages** response |
 | `friendRequestId` | **List Friend Requests** response |
 | `fileId` | **List Files** response |
+| `resetToken` | From the forgot-password email link (`token` query param), for **Reset Password** |
+| `lookupUsername` | Username for **Get User by Username** (default `alice` matches seed) |
 
 Paste values into **Collection variables** (or an environment) in Bruno.
 
@@ -55,13 +57,36 @@ Paste values into **Collection variables** (or an environment) in Bruno.
 | Folder | Mount |
 |--------|--------|
 | Auth | `/api/auth` |
-| Settings | `/api/auth/profile` |
+| Settings | `/api/auth` (profile, password, notification preferences, user lookup) |
 | Teams | `/api/teams` |
 | Team Members | `/api/team-members` |
 | Conversations | `/api/conversations` |
 | Messages | `/api/messages` |
 | Friend Requests | `/api/friend-requests` |
 | Files | `/api/files` |
+| AI | `/api/ai` |
+
+### Route checklist (REST)
+
+| Method | Path | Bruno folder |
+|--------|------|----------------|
+| POST | `/api/auth/sign-up` | Auth |
+| POST | `/api/auth/sign-in` | Auth |
+| POST | `/api/auth/sign-out` | Auth |
+| POST | `/api/auth/forgot-password` | Auth |
+| POST | `/api/auth/reset-password` | Auth |
+| GET | `/api/auth/check-token` | Auth |
+| PUT | `/api/auth/profile` | Settings |
+| PUT | `/api/auth/profile/password` | Settings |
+| PUT | `/api/auth/notification-preferences` | Settings |
+| GET | `/api/auth/users/by-username/:username` | Settings |
+| POST | `/api/ai/rewrite` | AI |
+| CRUD + typing | `/api/conversations` … | Conversations |
+| CRUD | `/api/messages` … | Messages |
+| CRUD + channels | `/api/teams` … | Teams |
+| CRUD | `/api/team-members` … | Team Members |
+| CRUD | `/api/friend-requests` … | Friend Requests |
+| CRUD + upload | `/api/files` … | Files |
 
 ## Friend request “accept” flow (seed)
 

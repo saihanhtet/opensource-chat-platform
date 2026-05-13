@@ -48,6 +48,10 @@ request:
       value: ""
     - name: myUserId
       value: ""
+    - name: resetToken
+      value: ""
+    - name: lookupUsername
+      value: alice
 bundled: false
 extensions:
   bruno:
